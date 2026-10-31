@@ -677,8 +677,7 @@ function App() {
   const selectLanguage = (id: string, exampleIndex?: number) => {
     const next = LANGUAGES.find((l) => l.id === id)
     if (!next) return
-    // مخرجات اللغة السابقة لا تخص الكود بعد التبديل، فتُغلق
-    if (next.id !== language) setOutput(null)
+    if (next.id !== language) closeForLanguageChange()
     const taken = files.filter((f) => f.id !== active.id).map((f) => f.name)
     updateFile(active.id, {
       language: next.id,
@@ -714,7 +713,9 @@ function App() {
     const name = raw.trim()
     // الأسماء فريدة لأن إصلاحات الذكاء الاصطناعي تُطبَّق على الملفات بأسمائها
     if (!name || name === file.name || files.some((f) => f.name === name)) return
-    updateFile(file.id, { name, language: languageOf(name, file.language) })
+    const nextLanguage = languageOf(name, file.language)
+    if (file.id === active.id && nextLanguage !== file.language) closeForLanguageChange()
+    updateFile(file.id, { name, language: nextLanguage })
   }
 
   // كل ملف مستورد يفتح في تبويب جديد بلغة امتداده، وأولها يصبح النشط
@@ -760,6 +761,15 @@ function App() {
   const closePanel = () => {
     setReview(null)
     setError(null)
+  }
+
+  // المخرجات والفحص كانا للكود بلغته السابقة، فيُغلقان عند تغيير لغة الملف النشط؛ فحص جارٍ يُلغى بهدوء بلا رسالة
+  const closeForLanguageChange = () => {
+    setOutput(null)
+    analyzeAbort.current?.abort()
+    analyzeAbort.current = null
+    setLoading(false)
+    closePanel()
   }
 
   const explanationText = review
