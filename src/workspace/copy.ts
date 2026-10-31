@@ -16,21 +16,10 @@ export const workspaceCopy = {
     cancel: 'إلغاء',
     // نوافذ التأكيد: عنوان يسمّي الفعل، ونص يقول ما سيضيع وهل يمكن استعادته
     confirms: {
-      closeFile: (name: string) => ({
-        title: `إغلاق ${name}؟`,
-        body: 'سيُفقد محتوى هذا الملف، ويُحذف من حسابك إن كنت مسجّلاً.',
-        action: 'إغلاق الملف',
-      }),
       clearEditor: (name: string) => ({
         title: 'مسح المحرر؟',
         body: `سيُمسح كل الكود في ${name}. يمكنك استعادته من السجل.`,
         action: 'مسح',
-      }),
-      replaceCode: (language: string) => ({
-        title: 'استبدال الكود بمثال؟',
-        body: `سيحل مثال ${language} محل الكود الحالي. يمكنك استعادة كودك من السجل، أو الإبقاء عليه وتغيير اللغة فقط.`,
-        action: 'استبدال بالمثال',
-        cancel: 'إبقاء كودي',
       }),
       clearVersions: (name: string, n: number) => ({
         title: 'حذف كل نسخ هذا الملف نهائياً؟',
@@ -42,6 +31,18 @@ export const workspaceCopy = {
     current: 'الحالية',
     lines: (n: number) => (n === 1 ? 'سطر واحد' : `${n} سطر`),
     resizePanels: 'تغيير عرض المحرر ولوحة المراجعة',
+    output: 'المخرجات',
+    runOutput: 'تشغيل الكود وعرض المخرجات',
+    rerun: 'تشغيل من جديد',
+    closeOutput: 'إغلاق المخرجات',
+    outputFrame: (name: string) => `معاينة ${name}`,
+    outputEmpty: 'لا توجد مخرجات. اطبع القيم بـ console.log.',
+    outputNothing: 'انتهى البرنامج بلا مخرجات.',
+    running: 'جارٍ التشغيل على الخادم…',
+    runStats: (time: string, memory: number | null) => `الوقت ${time} ث${memory ? ` · الذاكرة ${Math.round(memory / 1024)} MB` : ''}`,
+    runNetwork: 'تعذّر الاتصال بخادم التشغيل. تحقق من اتصالك وحاول مجدداً.',
+    runLimit: 'وصلت خدمة التشغيل لحدها اليومي. حاول لاحقاً.',
+    runFailed: (detail: string | number) => `تعذّر تشغيل الكود: ${detail}`,
     toasts: {
       syncFailed: 'تعذّر حفظ ملفاتك في حسابك. تعديلاتك محفوظة على هذا الجهاز وستُرفع عند عودة الاتصال.',
       draftsRestored: 'استُعيدت تعديلات لم تصل لحسابك من هذا الجهاز.',
@@ -69,21 +70,10 @@ export const workspaceCopy = {
     copyCode: 'Copy code',
     cancel: 'Cancel',
     confirms: {
-      closeFile: (name: string) => ({
-        title: `Close ${name}?`,
-        body: "This file's content will be lost, and it's removed from your account if you're signed in.",
-        action: 'Close file',
-      }),
       clearEditor: (name: string) => ({
         title: 'Clear the editor?',
         body: `All the code in ${name} will be cleared. You can bring it back from History.`,
         action: 'Clear',
-      }),
-      replaceCode: (language: string) => ({
-        title: 'Replace your code with an example?',
-        body: `A ${language} example will replace your current code. You can get your code back from History, or keep it and only change the language.`,
-        action: 'Use the example',
-        cancel: 'Keep my code',
       }),
       clearVersions: (name: string, n: number) => ({
         title: 'Delete all versions of this file permanently?',
@@ -95,6 +85,18 @@ export const workspaceCopy = {
     current: 'Current',
     lines: (n: number) => (n === 1 ? '1 line' : `${n} lines`),
     resizePanels: 'Resize the editor and review panels',
+    output: 'Output',
+    runOutput: 'Run the code and show its output',
+    rerun: 'Run again',
+    closeOutput: 'Close output',
+    outputFrame: (name: string) => `Preview of ${name}`,
+    outputEmpty: 'No output. Print values with console.log.',
+    outputNothing: 'The program finished without output.',
+    running: 'Running on the server…',
+    runStats: (time: string, memory: number | null) => `Time ${time}s${memory ? ` · Memory ${Math.round(memory / 1024)} MB` : ''}`,
+    runNetwork: "Couldn't reach the run server. Check your connection and try again.",
+    runLimit: 'The run service has reached its daily limit. Try again later.',
+    runFailed: (detail: string | number) => `Couldn't run the code: ${detail}`,
     toasts: {
       syncFailed: "Couldn't save your files to your account. Your changes are kept on this device and will upload when you're back online.",
       draftsRestored: 'Restored changes from this device that never reached your account.',

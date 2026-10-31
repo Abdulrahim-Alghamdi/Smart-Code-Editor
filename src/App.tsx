@@ -13,6 +13,8 @@ import { workspaceCopy } from '@/workspace/copy'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
+import { OutputPanel } from '@/workspace/OutputPanel'
+import { BROWSER_RUN, SERVER_RUN } from '@/workspace/run'
 import { VersionsDialog } from '@/workspace/VersionsDialog'
 import { localDb, type Snapshot } from '@/services/localDb'
 import { AccountDialog, type AccountTab } from '@/account/AccountDialog'
@@ -340,6 +342,8 @@ function App() {
   const [lang, setLang] = useStored<Lang>(KEYS.lang, 'ar', parseLang)
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // لقطة الكود وقت الضغط على "المخرجات"؛ run يتغير مع كل تشغيل فيُعاد تحميل الإطار وتُمسح المخرجات السابقة
+  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; run: number } | null>(null)
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
@@ -373,6 +377,12 @@ function App() {
   const language = active.language
   const hasCode = files.some((f) => f.content.trim())
   const current = LANGUAGES.find((l) => l.id === language) ?? LANGUAGES[0]
+  // HTML و JavaScript تعمل في المتصفح؛ بايثون وجافا وغيرهما على الخادم، فتحتاج حساباً مثل الفحص
+  const runnable = BROWSER_RUN.includes(language) || SERVER_RUN.includes(language)
+  const runOutput = () => {
+    if (SERVER_RUN.includes(language) && needsAccount()) return
+    setOutput({ fileId: active.id, name: active.name, language, code, run: (output?.run ?? 0) + 1 })
+  }
   const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
   // تتحول واجهة البداية إلى مساحة عمل بعمودين عند بدء الفحص
   const panelOpen = Boolean(review || error || loading)
@@ -732,9 +742,9 @@ function App() {
     notify(wc.toasts.fileSaved(name), 'success')
   }
 
-  const closeFile = async (file: ProjectFile) => {
+  // الإغلاق فوري بلا تأكيد، بطلب المستخدم
+  const closeFile = (file: ProjectFile) => {
     if (files.length === 1) return
-    if (file.content.trim() && !(await confirm({ ...wc.confirms.closeFile(file.name), cancel: wc.cancel, danger: true }))) return
     const rest = files.filter((f) => f.id !== file.id)
     setFiles(rest)
     if (file.id === active.id) setActiveId(rest[Math.max(0, files.indexOf(file) - 1)].id)
@@ -1068,19 +1078,28 @@ function App() {
                   />
                 </div>
 
+                {output?.fileId === active.id && (
+                  <OutputPanel
+                    key={output.run}
+                    name={output.name}
+                    language={output.language}
+                    code={output.code}
+                    onRerun={runOutput}
+                    onClose={() => setOutput(null)}
+                    copy={wc}
+                  />
+                )}
+
                 <div className="mt-2 flex items-center gap-1 border-t border-line p-2">
-                  {/* تبديل اللغة يحمّل مثالها النظيف كعرض تجريبي، ويسأل أولاً إن كان في الملف كود كتبه المستخدم.
+                  {/* تبديل اللغة يحمّل مثالها النظيف كعرض تجريبي، إلا إن كان في الملف كود كتبه المستخدم فيبقى كما هو.
                       dir="ltr" حتى لا تنقلب C# و C++ إلى #C و ++C في الصفحة العربية */}
                   <select
                     dir="ltr"
                     value={language}
-                    onChange={async (e) => {
-                      const id = e.target.value
+                    onChange={(e) => {
+                      // بلا نافذة تأكيد بطلب المستخدم: كود كتبه يبقى وتتغير اللغة فقط، والمثال يُحمَّل للمحرر الفارغ أو الذي فيه مثال
                       const untouched = !code.trim() || current.examples.includes(code)
-                      const label = LANGUAGES.find((l) => l.id === id)?.label ?? id
-                      const replace = untouched || (await confirm({ ...wc.confirms.replaceCode(label), danger: true }))
-                      if (replace && !untouched) await keepVersion()
-                      selectLanguage(id, replace ? CLEAN_EXAMPLE : undefined)
+                      selectLanguage(e.target.value, untouched ? CLEAN_EXAMPLE : undefined)
                     }}
                     aria-label={tr.language}
                     className="rounded-lg bg-transparent px-2 py-1.5 text-sm text-ink hover:bg-surface"
@@ -1095,7 +1114,16 @@ function App() {
                     {code.split('\n').length} {tr.lines} · {code.length} {tr.chars}
                   </span>
                   <div className="ms-auto flex items-center gap-1">
-                    <button onClick={() => setShortcutsOpen(true)} aria-label={wc.shortcuts} title={wc.shortcuts} className={`${iconButton} hidden sm:grid`}>
+                    {runnable && (
+                      <button onClick={runOutput} disabled={!code.trim()} title={wc.runOutput} className={labelButton}>
+                        <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden="true">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        {wc.output}
+                      </button>
+                    )}
+                    {/* الاختصارات للوحة مفاتيح: يُخفى الزر على شاشات اللمس (جوال وتابلت) ويظهر مع الفأرة */}
+                    <button onClick={() => setShortcutsOpen(true)} aria-label={wc.shortcuts} title={wc.shortcuts} className={`${iconButton} hidden pointer-fine:grid`}>
                       <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                         <rect x="2" y="6" width="20" height="12" rx="2" />
                         <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />

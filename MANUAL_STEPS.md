@@ -35,9 +35,11 @@ npx supabase secrets set GEMINI_API_KEY=your-key-here
 npx supabase secrets set ALLOWED_ORIGINS="https://smartcode-editor.vercel.app,https://smart-code-editor-*-smart-code-editor-org.vercel.app,http://localhost:5173,http://localhost:3000"
 ```
 
+The Output button runs Python, Java and the other compiled languages on Wandbox (https://wandbox.org), a free public service that needs no key, so there is nothing to set for it.
+
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided by Supabase automatically. Don't set them.
 
-**Check:** `npx supabase secrets list` shows both names.
+**Check:** `npx supabase secrets list` shows `GEMINI_API_KEY` and `ALLOWED_ORIGINS`.
 
 ## 3. Deploy the Edge Functions
 
@@ -46,9 +48,10 @@ The Gemini proxy is the existing `gemini` function (`supabase/functions/gemini`)
 ```bash
 npx supabase functions deploy gemini --project-ref hyztzllvefbsdbqvqivs
 npx supabase functions deploy login --project-ref hyztzllvefbsdbqvqivs
+npx supabase functions deploy run --project-ref hyztzllvefbsdbqvqivs
 ```
 
-**Check:** sign in on the live site and click review. The answer should come back without a "request failed (404)" error.
+**Check:** sign in on the live site and click review. The answer should come back without a "request failed (404)" error. Then switch to Python and click **Output**: the example's output should appear.
 
 ## 4. Auth URLs
 
