@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { iconButton } from '@/lib/ui'
+import { LANGUAGES } from '@/lib/languages'
 import { supabase } from '@/lib/supabase'
 import type { WorkspaceCopy } from './copy'
-import { SERVER_RUN } from './run'
+import { runLimitMs, SERVER_RUN } from './run'
+import { getCachedRun, putCachedRun, runKey, type Line } from './runCache'
+import { engineLoaded, runInWorker, type Engine } from './workerRunner'
 
 interface RunResult {
+  // true: الدالة أعادت نتيجة محفوظة لديها لهذا الكود
+  cached?: boolean
   stdout: string
   stderr: string
   compileOutput: string
@@ -44,52 +49,160 @@ const page = (language: string, code: string) =>
 
 const MAX_LINES = 500
 
-interface Line {
-  level: string
-  text: string
-}
-
 interface Props {
   name: string
   language: string
   code: string
+  // true: يتجاهل النتيجة المحفوظة ويشغّل الكود فعلاً ("تشغيل جديد")
+  fresh: boolean
   onRerun: () => void
+  onRunFresh: () => void
   onClose: () => void
   copy: WorkspaceCopy
 }
 
+// لغات تُترجم قبل التشغيل على الخادم، فتظهر لها "ترجمة وتشغيل" بدل "تشغيل"
+const COMPILED = ['java', 'c', 'cpp', 'csharp', 'go', 'rust', 'typescript']
+// انتظار قبل إعادة المحاولة مرة عند انقطاع الاتصال بالدالة
+const RETRY_DELAY_MS = 1_200
+
 // كود المستخدم يعمل في iframe معزول (allow-scripts بلا allow-same-origin): لا يصل لجلسة الحساب ولا لتخزين الموقع.
-// shortcut: حلقة لا تنتهي قد تجمّد التبويب في متصفح لا يعزل iframe في عملية مستقلة؛ أضف مهلة عبر Worker إن ظهرت شكاوى
-export function OutputPanel({ name, language, code, onRerun, onClose, copy }: Props) {
+// shortcut: حلقة لا تنتهي في JavaScript قد تجمّد التبويب في متصفح لا يعزل iframe في عملية مستقلة؛ انقله لـ Worker إن ظهرت شكاوى
+export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, onClose, copy }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [lines, setLines] = useState<Line[]>([])
   const html = language === 'html'
-  // بايثون وجافا وغيرهما تعمل على الخادم (دالة run ← Wandbox)، لا في المتصفح
+  // بايثون و SQL في Worker داخل المتصفح؛ جافا و C++ وغيرهما على الخادم (دالة run ← Wandbox)؛ HTML و JavaScript في iframe
+  const engine: Engine | null = language === 'python' || language === 'sql' ? language : null
   const server = SERVER_RUN.includes(language)
-  const [running, setRunning] = useState(server)
-  const [stats, setStats] = useState<string | null>(null)
+  // loading: أول تشغيل ينتظر تحميل المحرك؛ running: الكود يعمل
+  const [phase, setPhase] = useState<'loading' | 'running' | 'done'>(engine || server ? 'running' : 'done')
+  const running = phase !== 'done'
+  const [time, setTime] = useState<string | null>(null)
+  const [cached, setCached] = useState(false)
+  // ثوانٍ منذ الإرسال للخادم، تُعرض حية حتى لا يبدو الانتظار متجمداً
+  const [elapsed, setElapsed] = useState(0)
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
-    if (!server) return
+    if (!server || !running) return
+    const started = performance.now()
+    const timer = setInterval(() => setElapsed((performance.now() - started) / 1000), 100)
+    return () => clearInterval(timer)
+  }, [server, running])
+
+  useEffect(() => {
+    if (!engine && !server) return
     let alive = true
-    supabase.functions.invoke<RunResult>('run', { body: { language, code } }).then(async ({ data, error }) => {
-      if (!alive) return
-      setRunning(false)
-      if (data) {
-        setLines(toLines(data))
-        if (data.time) setStats(copy.runStats(data.time, data.memory))
-        return
+    let stop = () => {}
+    // نسخة محلية من الأسطر لحفظها في الكاش بعد الانتهاء
+    const collected: Line[] = []
+    const addLine = (line: Line) => {
+      collected.push(line)
+      setLines((all) => [...all, line].slice(-MAX_LINES))
+    }
+    const finish = (result: { lines?: Line[]; time: string | null; cache?: string }) => {
+      if (result.lines) {
+        collected.push(...result.lines)
+        setLines(result.lines)
       }
+      setTime(result.time)
+      setPhase('done')
+      if (result.cache) putCachedRun(result.cache, { lines: collected.slice(-MAX_LINES), time: result.time })
+    }
+
+    void (async () => {
+      // الكود نفسه شُغّل من قبل: النتيجة المحفوظة فوراً، بلا تحميل محرك ولا طلب للخادم
+      const key = await runKey(language, name, code)
+      if (!fresh) {
+        const hit = await getCachedRun(key)
+        if (!alive) return
+        if (hit) {
+          setCached(true)
+          return finish({ lines: hit.lines, time: hit.time })
+        }
+      }
+      if (!alive) return
+
+      if (engine) {
+        if (!engineLoaded(engine)) setPhase('loading')
+        let started = 0
+        const run = runInWorker(engine, code, name, {
+          onReady: () => {
+            started = performance.now()
+            setPhase('running')
+          },
+          // print يرسل السطر بلا \n الأخير؛ السطر الفارغ يبقى سطراً
+          onLine: (level, text) => addLine({ level, text: text || ' ' }),
+        })
+        stop = run.stop
+        const end = await run.done
+        // stopped = هذه اللوحة أوقفته عند إغلاقها أو إعادة تركيبها، فلا تُحدَّث حالتها
+        if (end === 'stopped' || !alive) return
+        if (end === 'timeout') addLine({ level: 'warn', text: copy.runTimeout })
+        if (end === 'loadFailed') addLine({ level: 'error', text: copy.engineLoadFailed })
+        const seconds = end === 'loadFailed' ? null : ((performance.now() - started) / 1000).toFixed(2)
+        // المهلة وفشل التحميل ليسا نتيجة الكود، فلا يُحفظان
+        return finish({ time: seconds, cache: end === 'done' ? key : undefined })
+      }
+
+      // مهلة صارمة للتشغيل كله (إعادة المحاولة ضمنها)، وإغلاق اللوحة يلغي الطلب
+      const limit = runLimitMs(language)
+      const deadline = performance.now() + limit
+      const controller = new AbortController()
+      stop = () => controller.abort()
+      const call = () =>
+        supabase.functions.invoke<RunResult>('run', {
+          body: { language, code, name, fresh },
+          timeout: Math.max(1, Math.floor(deadline - performance.now())),
+          signal: controller.signal,
+        })
+      let { data, error } = await call()
+      // بلا رد HTTP إطلاقاً (انقطاع بين المتصفح والدالة): محاولة واحدة أخرى بعد 1.2 ثانية إن بقي وقت يكفيها.
+      // الدالة نفسها تعيد المحاولة مع Wandbox عند الانشغال أو أخطاء 5xx، فلا تُكرر هنا
+      if (!data && !(error instanceof FunctionsHttpError) && alive && deadline - performance.now() > RETRY_DELAY_MS + 3_000) {
+        setRetrying(true)
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
+        if (!alive) return
+        ;({ data, error } = await call())
+      }
+      if (!alive) return
+      if (data) {
+        if (data.cached) setCached(true)
+        return finish({ lines: toLines(data), time: data.time, cache: key })
+      }
+      // أخطاء الخادم تُعرض برسالة واضحة بدل نصها الخام، ولا تُحفظ لأنها ليست نتيجة الكود
+      const label = LANGUAGES.find((l) => l.id === language)?.label ?? language
       const reply = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null
-      const text = !(error instanceof FunctionsHttpError) ? copy.runNetwork : reply?.error === 'limit' ? copy.runLimit : copy.runFailed(reply?.detail ?? error.context.status)
-      if (alive) setLines([{ level: 'error', text }])
-    })
+      const timedOut = reply?.error === 'timeout' || (!reply && performance.now() >= deadline - 100)
+      const text = timedOut
+        ? copy.runTookTooLong(label, limit / 1000)
+        : !(error instanceof FunctionsHttpError)
+          ? copy.runNetwork
+          : reply?.error === 'busy'
+            ? copy.runBusy(label)
+            : reply?.error === 'unavailable'
+              ? copy.runUnavailable(label)
+              : copy.runFailed(reply?.detail ?? error.context.status)
+      if (alive) finish({ lines: [{ level: timedOut ? 'warn' : 'error', text }], time: null })
+    })()
+
     return () => {
       alive = false
+      stop()
     }
     // تشغيل واحد لكل لوحة: App يعيد تركيبها بمفتاح جديد عند "تشغيل من جديد"
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const status =
+    phase === 'loading'
+      ? copy.engineLoading[engine ?? 'python']
+      : retrying
+        ? copy.runRetrying(LANGUAGES.find((l) => l.id === language)?.label ?? language)
+        : server
+          ? (COMPILED.includes(language) ? copy.serverCompiling : copy.serverRunning)(elapsed.toFixed(1))
+        : copy.runningLocal
 
   useEffect(() => {
     const receive = (e: MessageEvent) => {
@@ -119,7 +232,7 @@ export function OutputPanel({ name, language, code, onRerun, onClose, copy }: Pr
           </button>
         </div>
       </div>
-      {!server && (
+      {!server && !engine && (
         <iframe
           ref={frameRef}
           title={copy.outputFrame(name)}
@@ -132,23 +245,33 @@ export function OutputPanel({ name, language, code, onRerun, onClose, copy }: Pr
       )}
       {(!html || lines.length > 0) && (
         <ol dir="ltr" aria-live="polite" aria-busy={running} className={`max-h-60 overflow-auto p-3 font-mono text-xs leading-5 ${html ? 'border-t border-line' : ''}`}>
+          {/* مخرجات بايثون و SQL تظهر أثناء التشغيل، والمؤشر تحتها حتى ينتهي */}
+          {lines.map((line, i) => (
+            <li key={i} className={`whitespace-pre-wrap break-words ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-300' : 'text-ink'}`}>
+              {line.text}
+            </li>
+          ))}
           {running ? (
             <li className="flex items-center gap-2 text-ink-2">
               <span className="size-3 animate-spin rounded-full border-2 border-line-strong border-t-accent" aria-hidden="true" />
-              {copy.running}
+              <span className="tabular-nums">{status}</span>
             </li>
-          ) : lines.length === 0 ? (
-            <li className="text-ink-2">{server ? copy.outputNothing : copy.outputEmpty}</li>
           ) : (
-            lines.map((line, i) => (
-              <li key={i} className={`whitespace-pre-wrap break-words ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-300' : 'text-ink'}`}>
-                {line.text}
-              </li>
-            ))
+            lines.length === 0 && <li className="text-ink-2">{server || engine ? copy.outputNothing : copy.outputEmpty}</li>
           )}
         </ol>
       )}
-      {stats && <p className="border-t border-line px-3 py-1.5 text-[11px] tabular-nums text-ink-2">{stats}</p>}
+      {(time || cached) && (
+        <p className="flex items-center gap-2 border-t border-line px-3 py-1 text-[11px] tabular-nums text-ink-2">
+          {cached ? copy.cachedStats(time) : time && copy.runStats(time, null)}
+          {/* النتيجة المحفوظة قد لا تناسب برنامجاً عشوائياً أو يعتمد على الوقت، فيمكن تشغيله فعلاً */}
+          {cached && (
+            <button type="button" onClick={onRunFresh} className="ms-auto rounded px-1.5 py-0.5 text-accent hover:bg-surface">
+              {copy.runFresh}
+            </button>
+          )}
+        </p>
+      )}
     </section>
   )
 }

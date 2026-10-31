@@ -147,7 +147,9 @@ const t = {
     copied: 'تم النسخ ✓',
     analyze: 'فحص الكود بالذكاء الاصطناعي',
     analyzing: 'جاري الفحص واستخراج الأخطاء...',
-    newReview: 'مراجعة جديدة',
+    stopAnalyze: 'إيقاف الفحص',
+    reviewStopped: 'أُوقف الفحص.',
+    closeReview: 'إغلاق المراجعة',
     signinToAnalyze: 'سجّل الدخول أو أنشئ حساباً مجانياً لفحص الكود بالذكاء الاصطناعي',
     tabs: { bugs: 'تحليل الأخطاء والسبب الجذري', fix: 'الإصلاح المقترح', optimize: 'التحسين وأفضل الممارسات' },
     rootCause: 'السبب الجذري',
@@ -223,7 +225,9 @@ const t = {
     copied: 'Copied ✓',
     analyze: 'Analyze code with AI',
     analyzing: 'Analyzing and extracting errors...',
-    newReview: 'New review',
+    stopAnalyze: 'Stop review',
+    reviewStopped: 'Review stopped.',
+    closeReview: 'Close review',
     signinToAnalyze: 'Log in or create a free account to review code with AI',
     tabs: { bugs: 'Bug Analysis & Root Cause', fix: 'Suggested Code Fix', optimize: 'Optimization & Best Practices' },
     rootCause: 'Root Cause',
@@ -343,7 +347,7 @@ function App() {
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // لقطة الكود وقت الضغط على "المخرجات"؛ run يتغير مع كل تشغيل فيُعاد تحميل الإطار وتُمسح المخرجات السابقة
-  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; run: number } | null>(null)
+  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; fresh: boolean; run: number } | null>(null)
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
@@ -379,9 +383,10 @@ function App() {
   const current = LANGUAGES.find((l) => l.id === language) ?? LANGUAGES[0]
   // HTML و JavaScript تعمل في المتصفح؛ بايثون وجافا وغيرهما على الخادم، فتحتاج حساباً مثل الفحص
   const runnable = BROWSER_RUN.includes(language) || SERVER_RUN.includes(language)
-  const runOutput = () => {
+  // fresh: يتجاهل النتيجة المحفوظة لهذا الكود ويشغّله فعلاً
+  const runOutput = (fresh = false) => {
     if (SERVER_RUN.includes(language) && needsAccount()) return
-    setOutput({ fileId: active.id, name: active.name, language, code, run: (output?.run ?? 0) + 1 })
+    setOutput({ fileId: active.id, name: active.name, language, code, fresh, run: (output?.run ?? 0) + 1 })
   }
   const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
   // تتحول واجهة البداية إلى مساحة عمل بعمودين عند بدء الفحص
@@ -795,8 +800,21 @@ function App() {
   }
 
   // يرسل ملفات المشروع لدالة gemini على Supabase، وهي التي تحمل مفتاح Gemini وتجرّب النماذج بالترتيب
+  // الفحص الجاري، ليمكن إيقافه من زر الفحص أو من لوحة المراجعة
+  const analyzeAbort = useRef<AbortController | null>(null)
+
+  // يلغي الطلب في المتصفح ويغلق لوحة الانتظار. shortcut: الخادم قد يكمل طلب Gemini الجاري (ويُحسب من الحصة)؛ لإيقافه هناك يلزم إلغاء من جهة الدالة
+  const stopAnalyze = () => {
+    analyzeAbort.current?.abort()
+    analyzeAbort.current = null
+    setLoading(false)
+    notify(tr.reviewStopped, 'success')
+  }
+
   const analyzeCode = async (): Promise<void> => {
     if (!hasCode || needsAccount()) return
+    const controller = new AbortController()
+    analyzeAbort.current = controller
     setReview(null)
     setLoading(true)
     setError(null)
@@ -804,8 +822,10 @@ function App() {
       const body = {
         files: files.map((f) => ({ name: f.name, language: LANGUAGES.find((l) => l.id === f.language)?.label ?? f.language, content: f.content })),
       }
-      const invoke = () => supabase.functions.invoke<{ text: string; model: string }>('gemini', { body })
+      const invoke = () => supabase.functions.invoke<{ text: string; model: string }>('gemini', { body, signal: controller.signal })
       let { data, error } = await invoke()
+      // أُوقف الفحص أثناء الانتظار: لا رسالة خطأ ولا نتيجة
+      if (controller.signal.aborted) return
       // 401: الرمز انتهى أو أُلغيت جلسته على الخادم. نجدده ونعيد مرة، وإن تعذّر التجديد فالجلسة انتهت فعلاً: خروج ثم دخول من جديد
       if (error instanceof FunctionsHttpError && error.context.status === 401) {
         const { error: refreshError } = await supabase.auth.refreshSession()
@@ -815,6 +835,7 @@ function App() {
           return
         }
         ;({ data, error } = await invoke())
+        if (controller.signal.aborted) return
       }
       if (error) {
         // ردّ HTTP من غير دالتنا (مثل 404 دالة غير منشورة) يُعرض برقمه ورسالته؛ بلا ردّ إطلاقاً يعني انقطاع الاتصال
@@ -830,14 +851,18 @@ function App() {
       setLastModel(data.model)
       setTab('bugs')
     } finally {
-      setLoading(false)
+      // فحص أوقفه المستخدم أو حل محله فحص أحدث لا يغيّر حالة الانتظار
+      if (analyzeAbort.current === controller) {
+        analyzeAbort.current = null
+        setLoading(false)
+      }
     }
   }
 
   // اختصارات لوحة المفاتيح. مرحلة الالتقاط تسبق Monaco، فلا ينفّذ أمره الافتراضي (Ctrl+Enter عنده يضيف سطراً)
-  const shortcutActions = useRef({ analyze: analyzeCode, save: () => code && exportFile() })
+  const shortcutActions = useRef({ analyze: loading ? stopAnalyze : analyzeCode, save: () => code && exportFile() })
   useEffect(() => {
-    shortcutActions.current = { analyze: analyzeCode, save: () => code && exportFile() }
+    shortcutActions.current = { analyze: loading ? stopAnalyze : analyzeCode, save: () => code && exportFile() }
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1084,7 +1109,9 @@ function App() {
                     name={output.name}
                     language={output.language}
                     code={output.code}
-                    onRerun={runOutput}
+                    fresh={output.fresh}
+                    onRerun={() => runOutput()}
+                    onRunFresh={() => runOutput(true)}
                     onClose={() => setOutput(null)}
                     copy={wc}
                   />
@@ -1115,7 +1142,7 @@ function App() {
                   </span>
                   <div className="ms-auto flex items-center gap-1">
                     {runnable && (
-                      <button onClick={runOutput} disabled={!code.trim()} title={wc.runOutput} className={labelButton}>
+                      <button onClick={() => runOutput()} disabled={!code.trim()} title={wc.runOutput} className={labelButton}>
                         <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden="true">
                           <path d="M8 5v14l11-7z" />
                         </svg>
@@ -1145,14 +1172,20 @@ function App() {
                       </svg>
                     </button>
                     <button
-                      onClick={analyzeCode}
-                      disabled={loading || !hasCode}
-                      aria-label={loading ? tr.analyzing : user ? tr.analyze : tr.signinToAnalyze}
-                      title={user ? tr.analyze : tr.signinToAnalyze}
-                      className="ms-1 grid size-9 place-items-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                      onClick={loading ? stopAnalyze : analyzeCode}
+                      disabled={!loading && !hasCode}
+                      aria-label={loading ? tr.stopAnalyze : user ? tr.analyze : tr.signinToAnalyze}
+                      title={loading ? tr.stopAnalyze : user ? tr.analyze : tr.signinToAnalyze}
+                      className="relative ms-1 grid size-9 place-items-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                     >
                       {loading ? (
-                        <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                        // أثناء الفحص يصير الزر زر إيقاف: مربع وسط حلقة دوّارة
+                        <>
+                          <span className="absolute inset-1 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden="true" />
+                          <svg viewBox="0 0 24 24" className="size-3" fill="currentColor" aria-hidden="true">
+                            <rect x="5" y="5" width="14" height="14" rx="2" />
+                          </svg>
+                        </>
                       ) : !user ? (
                         <LockIcon className="size-4" />
                       ) : (
@@ -1188,15 +1221,26 @@ function App() {
                           </button>
                         ))}
                     </div>
-                    <button onClick={closePanel} disabled={loading} className="shrink-0 px-4 py-3 text-xs font-medium text-ink-2 hover:text-ink disabled:opacity-40">
-                      {tr.newReview}
-                    </button>
+                    {/* يغلق اللوحة ويمسح النتيجة؛ أثناء الفحص يحل محله زر "إيقاف الفحص" */}
+                    {!loading && (
+                      <button onClick={closePanel} aria-label={tr.closeReview} title={tr.closeReview} className={`${iconButton} me-2 shrink-0`}>
+                        ✕
+                      </button>
+                    )}
                   </div>
 
                   <div aria-live="polite" data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto p-4 leading-relaxed text-ink">
                     {loading && (
                       <div role="status" className="space-y-3">
-                        <p className="text-ink-2">{tr.analyzing}</p>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-ink-2">{tr.analyzing}</p>
+                          <button type="button" onClick={stopAnalyze} className={`${outlineButton} flex items-center gap-1.5`}>
+                            <svg viewBox="0 0 24 24" className="size-3" fill="currentColor" aria-hidden="true">
+                              <rect x="5" y="5" width="14" height="14" rx="2" />
+                            </svg>
+                            {tr.stopAnalyze}
+                          </button>
+                        </div>
                         {[90, 75, 85, 60, 70].map((w, i) => (
                           <div key={i} aria-hidden="true" className="h-3 animate-pulse rounded bg-surface-2" style={{ width: `${w}%` }} />
                         ))}

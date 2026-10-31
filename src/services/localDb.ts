@@ -21,10 +21,14 @@ const MERGE_WINDOW_MS = 60_000
 let db: Promise<IDBDatabase> | null = null
 const open = () =>
   (db ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open('sce', 1)
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore('snapshots', { keyPath: 'id', autoIncrement: true }).createIndex('fileId', 'fileId')
-      req.result.createObjectStore('drafts', { keyPath: 'owner' })
+    const req = indexedDB.open('sce', 2)
+    req.onupgradeneeded = (event) => {
+      if (event.oldVersion < 1) {
+        req.result.createObjectStore('snapshots', { keyPath: 'id', autoIncrement: true }).createIndex('fileId', 'fileId')
+        req.result.createObjectStore('drafts', { keyPath: 'owner' })
+      }
+      // الإصدار 2: نتائج التشغيل المحفوظة، مرتبة بوقت الحفظ لحذف الأقدم
+      if (event.oldVersion < 2) req.result.createObjectStore('runs', { keyPath: 'key' }).createIndex('at', 'at')
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
@@ -42,9 +46,26 @@ const committed = (tx: IDBTransaction) =>
     tx.onerror = tx.onabort = () => reject(tx.error)
   })
 
-const store = async (name: 'snapshots' | 'drafts', mode: IDBTransactionMode) => (await open()).transaction(name, mode).objectStore(name)
+const store = async (name: 'snapshots' | 'drafts' | 'runs', mode: IDBTransactionMode) => (await open()).transaction(name, mode).objectStore(name)
+
+// آخر نتائج تشغيل تُحفظ على الجهاز؛ الأقدم يُحذف
+export const RUN_CACHE_LIMIT = 100
 
 export const localDb = {
+  async getRun<T>(key: string): Promise<T | null> {
+    const runs = await store('runs', 'readonly')
+    const row = (await done(runs.get(key))) as { value: T } | undefined
+    return row?.value ?? null
+  },
+
+  async putRun(key: string, value: unknown) {
+    const runs = await store('runs', 'readwrite')
+    runs.put({ key, value, at: Date.now() })
+    const keys = await done(runs.index('at').getAllKeys())
+    for (const old of keys.slice(0, Math.max(0, keys.length - RUN_CACHE_LIMIT))) runs.delete(old)
+    return committed(runs.transaction)
+  },
+
   // يحفظ محتوى الملف نسخةً جديدة، أو يحدّث آخر نسخة إذا بدأت قبل أقل من دقيقة. keep تثبّت النسخة قبل الاستعادة.
   // لكل محتوى نسخة واحدة: محتوى موجود من قبل (استعادة أو تراجع إليه) تنتقل نسخته للأعلى بدل تكرارها
   async addSnapshot(file: CloudFile, keep = false) {

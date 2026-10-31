@@ -131,16 +131,37 @@ print(is_palindrome("A man, a plan, a canal: Panama"))
     label: 'SQL',
     glyph: 'SQL',
     examples: [
-      `SELECT name, email
+      `CREATE TABLE users (name TEXT, email TEXT, age INTEGER);
+INSERT INTO users VALUES
+  ('Sara', 'sara@example.com', 24),
+  ('Omar', 'omar@example.com', 17),
+  ('Lina', 'lina@example.com', 31);
+
+SELECT name, email
 FROM users
 WHERE age > 18
 ORDER name;
 `,
-      `SELECT *
+      `CREATE TABLE orders (id INTEGER, item TEXT, status TEXT);
+INSERT INTO orders VALUES
+  (1, 'Keyboard', 'shipped'),
+  (2, 'Monitor', NULL),
+  (3, 'Mouse', NULL);
+
+SELECT *
 FROM orders
 WHERE status = NULL;
 `,
-      `SELECT department, COUNT(*) AS employees
+      `CREATE TABLE staff (name TEXT, department TEXT);
+INSERT INTO staff VALUES
+  ('Sara', 'Engineering'),
+  ('Omar', 'Engineering'),
+  ('Lina', 'Design'),
+  ('Huda', 'Engineering'),
+  ('Yousef', 'Design'),
+  ('Maha', 'Sales');
+
+SELECT department, COUNT(*) AS employees
 FROM staff
 GROUP BY department
 ORDER BY employees DESC;
