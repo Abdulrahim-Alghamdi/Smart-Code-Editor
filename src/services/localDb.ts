@@ -84,6 +84,20 @@ export const localDb = {
       })
   },
 
+  // يحذف النسخة ومعها أي نسخة قديمة بالمحتوى نفسه، لأن القائمة تعرض واحدة منها فقط
+  async deleteSnapshot(snapshot: Snapshot) {
+    const snapshots = await store('snapshots', 'readwrite')
+    const all = (await done(snapshots.index('fileId').getAll(snapshot.fileId))) as Snapshot[]
+    for (const s of all) if (s.content === snapshot.content) snapshots.delete(s.id)
+    return committed(snapshots.transaction)
+  },
+
+  async clearSnapshots(fileId: string) {
+    const snapshots = await store('snapshots', 'readwrite')
+    for (const key of await done(snapshots.index('fileId').getAllKeys(fileId))) snapshots.delete(key)
+    return committed(snapshots.transaction)
+  },
+
   // تبويبات المسجّل كاملة كما كانت عند فشل آخر مزامنة؛ null إذا وصل كل شيء للحساب
   async loadDrafts(owner: string): Promise<CloudFile[] | null> {
     const drafts = await store('drafts', 'readonly')

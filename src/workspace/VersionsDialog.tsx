@@ -52,11 +52,13 @@ interface Props {
   current: string
   onClose: () => void
   onRestore: (snapshot: Snapshot) => void
+  onDelete: (snapshot: Snapshot) => void
+  onClear: () => void
   lang: 'ar' | 'en'
   copy: WorkspaceCopy
 }
 
-export function VersionsDialog({ versions, fileName, current, onClose, onRestore, lang, copy }: Props) {
+export function VersionsDialog({ versions, fileName, current, onClose, onRestore, onDelete, onClear, lang, copy }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const open = versions !== null
   // النسخة المفتوحة مربوطة بالقائمة التي فُتحت فيها، فكل فتح جديد للنافذة يبدأ مطوياً
@@ -108,37 +110,45 @@ export function VersionsDialog({ versions, fileName, current, onClose, onRestore
               // الشارة لأحدث نسخة تطابق المحرر فقط
               const isCurrent = v.id === currentId
               const lines = copy.lines(v.content.split('\n').length)
+              const time = timeAgo(v.savedAt, lang)
               return (
                 <li key={v.id} className={`rounded-lg ${isOpen ? 'bg-surface-2' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isOpen ? null : { list: versions, id: v.id })}
-                    aria-expanded={isOpen}
-                    aria-controls={`version-${v.id}`}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start hover:bg-surface-2"
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      className={`size-4 shrink-0 text-ink-2 transition-transform ${isOpen ? 'rotate-90' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden="true"
+                  <div className="flex items-center gap-1 pe-1">
+                    <button
+                      type="button"
+                      onClick={() => setExpanded(isOpen ? null : { list: versions, id: v.id })}
+                      aria-expanded={isOpen}
+                      aria-controls={`version-${v.id}`}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-start hover:bg-surface-2"
                     >
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm text-ink">{timeAgo(v.savedAt, lang)}</span>
-                      <span dir="ltr" className="block truncate text-start font-mono text-xs text-ink-2">
-                        {v.content.split('\n').find((line) => line.trim())?.trim()}
+                      <svg
+                        viewBox="0 0 24 24"
+                        className={`size-4 shrink-0 text-ink-2 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden="true"
+                      >
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm text-ink">{time}</span>
+                        <span dir="ltr" className="block truncate text-start font-mono text-xs text-ink-2">
+                          {v.content.split('\n').find((line) => line.trim())?.trim()}
+                        </span>
                       </span>
-                    </span>
-                    {isCurrent ? (
-                      <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">{copy.current}</span>
-                    ) : (
-                      <span className="shrink-0 text-xs tabular-nums text-ink-2">{lines}</span>
-                    )}
-                  </button>
+                      {isCurrent ? (
+                        <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">{copy.current}</span>
+                      ) : (
+                        <span className="shrink-0 text-xs tabular-nums text-ink-2">{lines}</span>
+                      )}
+                    </button>
+                    <button type="button" onClick={() => onDelete(v)} aria-label={copy.deleteVersion(time)} title={copy.deleteVersion(time)} className={`${iconButton} shrink-0 hover:text-red-400`}>
+                      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+                      </svg>
+                    </button>
+                  </div>
 
                   {isOpen && (
                     <div id={`version-${v.id}`} className="grid gap-3 px-3 pb-3">
@@ -163,7 +173,16 @@ export function VersionsDialog({ versions, fileName, current, onClose, onRestore
               )
             })}
           </ul>
-          <p className="px-4 pb-5 pt-3 text-xs text-ink-2 sm:px-6">{copy.versionsNote(SNAPSHOT_LIMIT)}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-5 pt-3 sm:px-6">
+            <p className="text-xs text-ink-2">{copy.versionsNote(SNAPSHOT_LIMIT)}</p>
+            <button
+              type="button"
+              onClick={() => window.confirm(copy.clearVersionsConfirm(fileName)) && onClear()}
+              className={`${outlineButton} hover:border-red-400/60 hover:text-red-400`}
+            >
+              {copy.clearVersions}
+            </button>
+          </div>
         </>
       )}
     </dialog>

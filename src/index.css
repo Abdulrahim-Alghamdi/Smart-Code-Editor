@@ -49,6 +49,11 @@ body {
 /* الواجهة LTR في اللغتين؛ كل فقرة عربية تُقرأ باتجاهها حتى لا تقفز النقطة والكلمات اللاتينية لطرفها الخطأ.
    المحاذاة left وليست start على الجذر، لأن start مع plaintext تصير يميناً للعربية؛ وما توسّطه text-center يبقى متوسطاً */
 @layer base {
+  /* قائمة select المنسدلة يرسمها النظام: مع خلفية select شفافة يجعلها Chromium على Windows بيضاء والنص فاتح، فتختفي الخيارات */
+  option {
+    background-color: var(--surface);
+    color: var(--ink);
+  }
   html:lang(ar) {
     text-align: left;
   }

@@ -516,6 +516,10 @@ function App() {
       setVersions([])
     })
 
+  // بعد الحذف تُقرأ القائمة من جديد، فتعكس ما في التخزين فعلاً ولو فشل الحذف
+  const deleteVersion = (snapshot: Snapshot) => localDb.deleteSnapshot(snapshot).catch(console.error).then(openVersions)
+  const clearVersions = () => localDb.clearSnapshots(active.id).catch(console.error).then(openVersions)
+
   // المحتوى الحالي يُثبَّت نسخةً قبل الاستعادة فيمكن الرجوع إليه، ثم تنتقل النسخة المستعادة للأعلى؛
   // فيجدها الحفظ التلقائي بعد الاستعادة أحدث نسخة ولا يكررها
   const restoreVersion = async (snapshot: Snapshot) => {
@@ -1449,6 +1453,8 @@ function App() {
         current={code}
         onClose={() => setVersions(null)}
         onRestore={restoreVersion}
+        onDelete={deleteVersion}
+        onClear={clearVersions}
         lang={lang}
         copy={wc}
       />
