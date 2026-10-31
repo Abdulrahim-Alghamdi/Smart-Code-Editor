@@ -20,6 +20,7 @@
     "monaco-editor": "^0.57.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-resizable-panels": "4.14.8",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {

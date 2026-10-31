@@ -2,23 +2,7 @@ import { useEffect, useRef } from 'react'
 import { iconButton, outlineButton } from '@/lib/ui'
 import { LANGUAGES } from '@/lib/languages'
 import type { WorkspaceCopy } from './copy'
-import type { HistoryEntry } from './history'
-
-const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-  ['year', 365 * 24 * 3600],
-  ['month', 30 * 24 * 3600],
-  ['day', 24 * 3600],
-  ['hour', 3600],
-  ['minute', 60],
-]
-
-// "منذ 5 دقائق" / "5 minutes ago"، وأقل من دقيقة "الآن"
-const timeAgo = (at: number, lang: 'ar' | 'en', now = Date.now()) => {
-  const seconds = Math.round((at - now) / 1000)
-  const format = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' })
-  for (const [unit, size] of UNITS) if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit)
-  return format.format(0, 'second')
-}
+import { timeAgo, type HistoryEntry } from './history'
 
 interface Props {
   open: boolean

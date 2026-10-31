@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
-import Editor, { type Monaco } from '@monaco-editor/react'
+import Editor, { type Monaco, type OnMount } from '@monaco-editor/react'
 import { useLenis } from 'lenis/react'
 import { GitHubIcon, GoogleIcon, LockIcon } from '@/components/Icons'
 import LandingSections from '@/components/LandingSections'
@@ -13,6 +13,10 @@ import { workspaceCopy } from '@/workspace/copy'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
 import { parseHistory, recordEntry, type HistoryEntry } from '@/workspace/history'
 import { RecentDialog } from '@/workspace/RecentDialog'
+import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
+import { SplitLayout } from '@/workspace/SplitLayout'
+import { VersionsDialog } from '@/workspace/VersionsDialog'
+import { localDb, type Snapshot } from '@/services/localDb'
 import { AccountDialog, type AccountTab } from '@/account/AccountDialog'
 import { AccountMenu } from '@/account/AccountMenu'
 import { accountCopy } from '@/account/copy'
@@ -339,6 +343,10 @@ function App() {
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
   const [history, setHistory, historyLoaded] = useStored<HistoryEntry[]>(KEYS.history, [], parseHistory)
   const [recentOpen, setRecentOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
+  const [versions, setVersions] = useState<Snapshot[] | null>(null)
+  const [online, setOnline] = useState(navigator.onLine)
   const [files, setFiles] = useState<ProjectFile[]>([FIRST_FILE])
   const [activeId, setActiveId] = useState<string>(FIRST_FILE.id)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -507,10 +515,65 @@ function App() {
     return () => clearTimeout(timer)
   }, [historyLoaded, active.id, active.name, active.language, active.content, history, setHistory])
 
+  // سجل النسخ في IndexedDB: نسخة لكل دقيقة تعديل من الملف النشط، بعد توقف الكتابة
+  useEffect(() => {
+    if (!active.content.trim() || isExample(active.content)) return
+    const file = { id: active.id, name: active.name, language: active.language, content: active.content }
+    // shortcut: فشل حفظ النسخة (IndexedDB محظور) لا يُعرض؛ تظهر النافذة فارغة عندها
+    const timer = setTimeout(() => localDb.addSnapshot(file).catch(console.error), HISTORY_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [active.id, active.name, active.language, active.content])
+
+  const openVersions = () =>
+    localDb.listSnapshots(active.id).then(setVersions, (e) => {
+      console.error(e)
+      setVersions([])
+    })
+
+  // المحتوى الحالي يُثبَّت نسخةً قبل الاستعادة، فيمكن الرجوع إليه
+  const restoreVersion = async (snapshot: Snapshot) => {
+    await localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content: active.content }, true).catch(console.error)
+    setCode(snapshot.content)
+    setVersions(null)
+    notify(wc.toasts.versionRestored, 'success')
+  }
+
+  // عودة الاتصال تعيد المزامنة فوراً بدل انتظار التعديل التالي
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine)
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
+
+  // مسودات المسجّل التي لم تصل لحسابه (انقطاع الشبكة)؛ تُقرأ قبل ملفات الحساب لأنها أحدث منها
+  const userId = auth.user?.id ?? null
+  const [drafts, setDrafts] = useState<{ owner: string; files: ProjectFile[] | null } | null>(null)
+  useEffect(() => {
+    if (!userId) return
+    let alive = true
+    const done = (files: ProjectFile[] | null) => alive && setDrafts({ owner: userId, files })
+    localDb.loadDrafts(userId).then(done, (e) => {
+      console.error(e)
+      done(null)
+    })
+    return () => {
+      alive = false
+    }
+  }, [userId])
+
   // ملفات المسجّل في مشروعه على Supabase؛ التبويبات المفتوحة هي المشروع
   const { projects, failed: projectsFailed } = useProjects()
-  // عند تحميل المشروع تحل ملفاته محل التبويبات، ويُضاف إليها ما كتبه الزائر قبل تسجيل الدخول حتى لا يضيع
-  const { files: cloudFiles, failed: filesFailed, sync: syncFiles } = useFiles(projects?.[0]?.id ?? null, (cloudFiles) => {
+  // عند تحميل المشروع تحل ملفاته (أو مسوداته) محل التبويبات، ويُضاف إليها ما كتبه الزائر قبل تسجيل الدخول حتى لا يضيع.
+  // التحميل ينتظر قراءة المسودات، حتى لا تبدأ مزامنة تحذف من الحساب ملفات لم تُدمج بعد
+  const projectId = drafts?.owner === userId ? (projects?.[0]?.id ?? null) : null
+  const { files: cloudFiles, failed: filesFailed, sync: syncFiles } = useFiles(projectId, (loaded) => {
+    const restored = drafts?.files
+    const cloudFiles = restored ?? loaded
+    if (restored) notify(wc.toasts.draftsRestored, 'success')
     const taken = cloudFiles.map((f) => f.name)
     const guestWork = files
       .filter((f) => f.content.trim() && !isExample(f.content) && !cloudFiles.some((c) => c.id === f.id))
@@ -534,15 +597,34 @@ function App() {
 
   // كل تعديل أو إضافة أو إغلاق يُرفع بعد توقف الكتابة؛ رسالة الفشل تظهر مرة حتى تنجح مزامنة
   const syncFailed = useRef(false)
+  // هل في التبويبات ما لم يصل للحساب؛ رقم آخر تعديل حتى لا تمسح نتيجة مزامنة قديمة حالة تعديل أحدث
+  const unsynced = useRef(false)
+  const syncRun = useRef(0)
   useEffect(() => {
-    if (!cloudFiles) return
+    unsynced.current = Boolean(cloudFiles && userId)
+    if (!cloudFiles || !userId) return
+    const run = ++syncRun.current
     const timer = setTimeout(async () => {
       const ok = await syncFiles(files)
+      // عند الفشل تُحفظ التبويبات على الجهاز، فتعود عند فتح الموقع ولو أُغلق قبل عودة الاتصال.
+      // shortcut: المسودة تحل محل ملفات الحساب كلها، فتعديل من جهاز آخر أثناء الانقطاع يُكتب فوقه؛ قارن الأوقات إن لزم
+      void (ok ? localDb.clearDrafts(userId) : localDb.saveDrafts(userId, files)).catch(console.error)
       if (!ok && !syncFailed.current) notify(wc.toasts.syncFailed, 'error')
       syncFailed.current = !ok
+      if (run === syncRun.current) unsynced.current = !ok
     }, SYNC_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [files, cloudFiles, syncFiles, wc.toasts.syncFailed])
+    // online: عودة الاتصال تعيد تشغيل المزامنة
+  }, [files, cloudFiles, userId, online, syncFiles, wc.toasts.syncFailed])
+
+  // إغلاق الصفحة قبل وصول التعديلات للحساب يطلب تأكيداً من المتصفح
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (unsynced.current) e.preventDefault()
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [])
 
   // الخروج يعيد المحرر لملف بداية بمعرّف جديد، حتى لا تُرفع ملفات حساب إلى حساب آخر يدخل بعده
   const signedIn = Boolean(auth.user)
@@ -554,6 +636,8 @@ function App() {
       setActiveId(starter.id)
       setReview(null)
       setError(null)
+      // تُقرأ المسودات من جديد عند الدخول التالي، لا تلك المقروءة في هذه الجلسة
+      setDrafts(null)
     }
     wasSignedIn.current = signedIn
   }, [signedIn])
@@ -614,6 +698,7 @@ function App() {
 
   // Monaco يعيد استخدام نموذج الملف بلغته القديمة إذا تغيرت لغة الملف وهو غير نشط، فنزامنها عند كل تبديل
   const monacoRef = useRef<Monaco | null>(null)
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   useEffect(() => {
     const monaco = monacoRef.current
     const model = monaco?.editor.getModel(monaco.Uri.parse(active.id))
@@ -755,6 +840,30 @@ function App() {
     }
   }
 
+  // اختصارات لوحة المفاتيح. مرحلة الالتقاط تسبق Monaco، فلا ينفّذ أمره الافتراضي (Ctrl+Enter عنده يضيف سطراً)
+  const shortcutActions = useRef({ analyze: analyzeCode, save: () => code && exportFile() })
+  useEffect(() => {
+    shortcutActions.current = { analyze: analyzeCode, save: () => code && exportFile() }
+  })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // داخل نافذة مفتوحة (الدخول، الحساب...) تبقى المفاتيح لها
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || document.querySelector('dialog[open]')) return
+      const key = e.key.toLowerCase()
+      const action =
+        key === 'enter' && !e.shiftKey ? shortcutActions.current.analyze
+        : key === 's' && !e.shiftKey ? shortcutActions.current.save
+        : key === 'f' && e.shiftKey ? () => editorRef.current?.getAction('editor.action.formatDocument')?.run()
+        : null
+      if (!action) return
+      e.preventDefault()
+      e.stopPropagation()
+      action()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
   return (
     <div className="min-h-svh bg-page text-ink selection:bg-accent/30">
       {/* الهيدر الثابت: الشعار وحالة الـ API والوضع واللغة والحساب */}
@@ -777,7 +886,9 @@ function App() {
                 {tr.toggle}
               </button>
             )}
-            {!accountLoaded ? null : user ? (
+            {!accountLoaded ? (
+              <span aria-hidden="true" className="h-9 w-28 animate-pulse rounded-lg bg-surface" />
+            ) : user ? (
               <AccountMenu
                 account={user}
                 copy={ac}
@@ -818,7 +929,7 @@ function App() {
               <p className="mt-3 text-[15px] text-ink-2">{tr.subtitle}</p>
             </div>
 
-            <div className={`grid w-full gap-4 transition-[max-width] duration-500 ${panelOpen ? 'max-w-6xl lg:grid-cols-2' : 'max-w-[740px]'}`}>
+            <SplitLayout resizeLabel={wc.resizePanels} className={`transition-[max-width] duration-500 ${panelOpen ? 'max-w-6xl' : 'max-w-[740px]'}`}>
               {/* صندوق المحرر بتصميم صندوق الإدخال */}
               <div className="flex flex-col overflow-hidden rounded-2xl border border-accent-soft bg-surface-2 shadow-sm">
                 {/* شريط أوامر الملفات فوق التبويبات؛ LTR مثل التبويبات والمحرر حتى يبقى على اليسار وبالترتيب نفسه في العربية */}
@@ -865,6 +976,12 @@ function App() {
                     </svg>
                     {wc.recent}
                     {history.length > 0 && <span className="tabular-nums text-ink-2/70">{history.length}</span>}
+                  </button>
+                  <button onClick={openVersions} className={labelButton}>
+                    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" />
+                    </svg>
+                    {wc.versions}
                   </button>
                 </div>
 
@@ -935,11 +1052,19 @@ function App() {
                     height="100%"
                     path={active.id}
                     language={language}
-                    onMount={(_, monaco) => {
+                    onMount={(editor, monaco) => {
+                      editorRef.current = editor
                       monacoRef.current = monaco
                       applyTabSize()
                     }}
                     theme="vs-dark"
+                    loading={
+                      <div aria-hidden="true" className="w-full space-y-2.5 self-start p-4">
+                        {[55, 40, 70, 35, 60, 25].map((w, i) => (
+                          <div key={i} className="h-3 animate-pulse rounded bg-white/10" style={{ width: `${w}%` }} />
+                        ))}
+                      </div>
+                    }
                     value={code}
                     onChange={(value) => setCode(value || '')}
                     options={{
@@ -989,6 +1114,12 @@ function App() {
                     {code.split('\n').length} {tr.lines} · {code.length} {tr.chars}
                   </span>
                   <div className="ms-auto flex items-center gap-1">
+                    <button onClick={() => setShortcutsOpen(true)} aria-label={wc.shortcuts} title={wc.shortcuts} className={`${iconButton} hidden sm:grid`}>
+                      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <rect x="2" y="6" width="20" height="12" rx="2" />
+                        <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+                      </svg>
+                    </button>
                     <button onClick={() => copy(code, 'code')} disabled={!code} aria-label={tr.copyCode} title={tr.copyCode} className={iconButton}>
                       {copied === 'code' ? (
                         '✓'
@@ -1054,7 +1185,14 @@ function App() {
                   </div>
 
                   <div aria-live="polite" data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto p-4 leading-relaxed text-ink">
-                    {loading && <p className="animate-pulse text-ink-2">{tr.analyzing}</p>}
+                    {loading && (
+                      <div role="status" className="space-y-3">
+                        <p className="text-ink-2">{tr.analyzing}</p>
+                        {[90, 75, 85, 60, 70].map((w, i) => (
+                          <div key={i} aria-hidden="true" className="h-3 animate-pulse rounded bg-surface-2" style={{ width: `${w}%` }} />
+                        ))}
+                      </div>
+                    )}
 
                     {error && (
                       <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-300">
@@ -1162,7 +1300,7 @@ function App() {
                   )}
                 </div>
               )}
-            </div>
+            </SplitLayout>
 
             {/* تنبيه الزائر: الفحص يحتاج حساباً */}
             {!user && (
@@ -1339,6 +1477,16 @@ function App() {
           onEditor={saveEditor}
         />
       )}
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} copy={wc} />
+      <VersionsDialog
+        versions={versions}
+        fileName={active.name}
+        current={code}
+        onClose={() => setVersions(null)}
+        onRestore={restoreVersion}
+        lang={lang}
+        copy={wc}
+      />
       <RecentDialog
         open={recentOpen}
         onClose={() => setRecentOpen(false)}

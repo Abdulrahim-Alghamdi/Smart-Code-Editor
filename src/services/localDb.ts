@@ -1,0 +1,92 @@
+// IndexedDB لما هو أكبر من localStorage: سجل نسخ كل ملف، ومسودات المسجّل التي لم تصل لحسابه بعد (انقطاع الشبكة).
+// البيانات على هذا المتصفح فقط، وكل دالة ترفض (reject) إذا كان IndexedDB محظوراً، والقرار عند المستدعي
+import type { CloudFile } from './projectService'
+
+export interface Snapshot {
+  id: number
+  fileId: string
+  name: string
+  language: string
+  content: string
+  createdAt: number
+  savedAt: number
+  // نسخة حُفظت قبل استعادة نسخة أقدم، فلا تُدمج فيها تعديلات بعدها
+  kept: boolean
+}
+
+export const SNAPSHOT_LIMIT = 50
+// تعديلات الدقيقة الواحدة تُدمج في نسخة واحدة، حتى لا تملأ كل وقفة كتابة السجل
+const MERGE_WINDOW_MS = 60_000
+
+let db: Promise<IDBDatabase> | null = null
+const open = () =>
+  (db ??= new Promise((resolve, reject) => {
+    const req = indexedDB.open('sce', 1)
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore('snapshots', { keyPath: 'id', autoIncrement: true }).createIndex('fileId', 'fileId')
+      req.result.createObjectStore('drafts', { keyPath: 'owner' })
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  }))
+
+const done = <T>(req: IDBRequest<T>) =>
+  new Promise<T>((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+
+const committed = (tx: IDBTransaction) =>
+  new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = tx.onabort = () => reject(tx.error)
+  })
+
+const store = async (name: 'snapshots' | 'drafts', mode: IDBTransactionMode) => (await open()).transaction(name, mode).objectStore(name)
+
+export const localDb = {
+  // يحفظ محتوى الملف نسخةً جديدة، أو يحدّث آخر نسخة إذا بدأت قبل أقل من دقيقة. keep تثبّت النسخة قبل الاستعادة
+  async addSnapshot(file: CloudFile, keep = false) {
+    const snapshots = await store('snapshots', 'readwrite')
+    // shortcut: نسخ الملفات المغلقة تبقى حتى يُمسح تخزين المتصفح؛ إن كبرت أضف حداً كلياً
+    const keys = await done(snapshots.index('fileId').getAllKeys(file.id))
+    const lastKey = keys.at(-1)
+    const last = lastKey === undefined ? undefined : ((await done(snapshots.get(lastKey))) as Snapshot | undefined)
+    const now = Date.now()
+
+    if (last?.content === file.content) {
+      if (keep && !last.kept) snapshots.put({ ...last, kept: true })
+    } else if (last && !last.kept && !keep && now - last.createdAt < MERGE_WINDOW_MS) {
+      snapshots.put({ ...last, name: file.name, language: file.language, content: file.content, savedAt: now })
+    } else {
+      snapshots.add({ fileId: file.id, name: file.name, language: file.language, content: file.content, createdAt: now, savedAt: now, kept: keep })
+      for (const key of keys.slice(0, Math.max(0, keys.length + 1 - SNAPSHOT_LIMIT))) snapshots.delete(key)
+    }
+    return committed(snapshots.transaction)
+  },
+
+  // الأحدث أولاً
+  async listSnapshots(fileId: string): Promise<Snapshot[]> {
+    const snapshots = await store('snapshots', 'readonly')
+    return ((await done(snapshots.index('fileId').getAll(fileId))) as Snapshot[]).reverse()
+  },
+
+  // تبويبات المسجّل كاملة كما كانت عند فشل آخر مزامنة؛ null إذا وصل كل شيء للحساب
+  async loadDrafts(owner: string): Promise<CloudFile[] | null> {
+    const drafts = await store('drafts', 'readonly')
+    const row = (await done(drafts.get(owner))) as { files: CloudFile[] } | undefined
+    return row?.files.length ? row.files : null
+  },
+
+  async saveDrafts(owner: string, files: CloudFile[]) {
+    const drafts = await store('drafts', 'readwrite')
+    drafts.put({ owner, files, savedAt: Date.now() })
+    return committed(drafts.transaction)
+  },
+
+  async clearDrafts(owner: string) {
+    const drafts = await store('drafts', 'readwrite')
+    drafts.delete(owner)
+    return committed(drafts.transaction)
+  },
+}

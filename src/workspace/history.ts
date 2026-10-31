@@ -44,3 +44,19 @@ export const recordEntry = (history: HistoryEntry[], entry: HistoryEntry): Histo
   if (last && last.content === entry.content && last.name === entry.name && last.language === entry.language) return history
   return [entry, ...history.filter((e) => e.id !== entry.id)].slice(0, HISTORY_LIMIT)
 }
+
+const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+]
+
+// "منذ 5 دقائق" / "5 minutes ago"، وأقل من دقيقة "الآن"
+export const timeAgo = (at: number, lang: 'ar' | 'en', now = Date.now()) => {
+  const seconds = Math.round((at - now) / 1000)
+  const format = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' })
+  for (const [unit, size] of UNITS) if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit)
+  return format.format(0, 'second')
+}
