@@ -9,7 +9,6 @@ export interface StorageAdapter {
 
 // كل مفاتيح التطبيق في مكان واحد، حتى يعرف النسخ الاحتياطي والحذف ما يوجد
 export const KEYS = {
-  freeUsed: 'sce.freeUsed',
   lang: 'sce.lang',
   editor: 'sce.editor',
   history: 'sce.history',

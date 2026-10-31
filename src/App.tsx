@@ -5,7 +5,7 @@ import { LockIcon } from '@/components/Icons'
 import LandingSections from '@/components/LandingSections'
 import SplitText from '@/components/SplitText'
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap'
-import { GUEST_LANGUAGE_COUNT, LANGUAGES } from '@/lib/languages'
+import { LANGUAGES } from '@/lib/languages'
 import { accentButton, iconButton, input, outlineButton } from '@/lib/ui'
 import { KEYS } from '@/services/storage'
 import { useStored } from '@/services/useStored'
@@ -18,19 +18,11 @@ import { AccountMenu } from '@/account/AccountMenu'
 import { accountCopy } from '@/account/copy'
 import { Toast, type ToastMessage } from '@/account/Toast'
 import { useAccount } from '@/account/useAccount'
+import { FunctionsHttpError } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
+import { useFiles } from '@/workspace/useFiles'
+import { useProjects } from '@/workspace/useProjects'
 import { useAuth } from '@/account/useAuth'
-
-// تعريف نوع البيانات لاستجابة Gemini API
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string
-      }>
-    }
-  }>
-  error?: { message?: string }
-}
 
 type Lang = 'ar' | 'en'
 type Tab = 'bugs' | 'fix' | 'optimize'
@@ -66,46 +58,8 @@ interface Review {
   suggestedFiles: FileContent[]
 }
 
-const TEXT_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    bugs: { type: 'ARRAY', items: { type: 'STRING' } },
-    rootCause: { type: 'STRING' },
-    fixes: { type: 'ARRAY', items: { type: 'STRING' } },
-    optimizations: { type: 'ARRAY', items: { type: 'STRING' } },
-  },
-  required: ['bugs', 'rootCause', 'fixes', 'optimizations'],
-}
-
-const FILE_LIST_SCHEMA = {
-  type: 'ARRAY',
-  items: {
-    type: 'OBJECT',
-    properties: { name: { type: 'STRING' }, content: { type: 'STRING' } },
-    required: ['name', 'content'],
-  },
-}
-
-const REVIEW_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    ar: TEXT_SCHEMA,
-    en: TEXT_SCHEMA,
-    fixedFiles: FILE_LIST_SCHEMA,
-    renamedFiles: {
-      type: 'ARRAY',
-      items: {
-        type: 'OBJECT',
-        properties: { from: { type: 'STRING' }, to: { type: 'STRING' } },
-        required: ['from', 'to'],
-      },
-    },
-    suggestedFiles: FILE_LIST_SCHEMA,
-  },
-  required: ['ar', 'en', 'fixedFiles', 'renamedFiles', 'suggestedFiles'],
-}
-
-const newId = () => Math.random().toString(36).slice(2)
+// uuid لأن معرّف الملف هو مفتاحه في جدول files
+const newId = () => crypto.randomUUID()
 
 // امتدادات شائعة أخرى للغات نفسها، حتى يُعرف ملف مستورد مثل index.htm أو config.yaml
 const EXT_ALIASES = new Map([
@@ -137,32 +91,26 @@ const uniqueName = (name: string, taken: string[]) => {
 
 // ترتيب أمثلة كل لغة: خطأ نحوي، خطأ منطقي، كود نظيف؛ النظيف هو العرض التجريبي عند تبديل اللغة
 const CLEAN_EXAMPLE = 2
-
-const GUEST_LANGUAGES = new Set(LANGUAGES.slice(0, GUEST_LANGUAGE_COUNT).map((l) => l.id))
+// أول ما يراه الزائر: خطأ منطقي يبدو سليماً ولا يلتقطه تلوين المحرر، فيُظهر قيمة الفحص بالذكاء الاصطناعي
+const LOGIC_BUG_EXAMPLE = 1
 
 const FIRST_FILE: ProjectFile = {
   // معرّف جديد في كل جلسة: السجل يحدّث لقطات الملفات بمعرّفها، ومعرّف ثابت كان سيكتب فوق ملف الجلسة السابقة
   id: newId(),
   name: `main.${LANGUAGES[0].ext}`,
   language: LANGUAGES[0].id,
-  content: LANGUAGES[0].examples[0],
+  content: LANGUAGES[0].examples[LOGIC_BUG_EXAMPLE],
 }
 
-// النماذج بالترتيب: إذا كان أحدها مشغولاً أو لم يرد خلال المهلة ننتقل للتالي
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest']
-const MODEL_TIMEOUT_MS = 20_000
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-
-// عدد مرات الفحص المجانية للزائر قبل طلب تسجيل الدخول
-const FREE_TRIES = 1
 // رقم متزايد لكل رسالة، فتظهر الرسالة نفسها من جديد إذا تكررت
 let toastCount = 0
 
 // اللقطة تُحفظ بعد توقف الكتابة بهذه المدة، لا مع كل حرف
 const HISTORY_DELAY_MS = 1500
+// الملفات تُرفع لحساب المسجّل بعد توقف الكتابة بهذه المدة
+const SYNC_DELAY_MS = 1000
 
 const parseLang = (v: unknown): Lang | null => (v === 'ar' || v === 'en' ? v : null)
-const parseCount = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null)
 // أمثلة اللغات الجاهزة ليست عمل المستخدم، فلا تُسجَّل في الملفات الأخيرة
 const isExample = (content: string) => LANGUAGES.some((l) => l.examples.includes(content))
 
@@ -195,8 +143,7 @@ const t = {
     analyze: 'فحص الكود بالذكاء الاصطناعي',
     analyzing: 'جاري الفحص واستخراج الأخطاء...',
     newReview: 'مراجعة جديدة',
-    freeLeft: 'لديك تجربة مجانية واحدة — سجّل الدخول للفحص بلا حدود',
-    freeUsed: 'انتهت تجربتك المجانية — سجّل الدخول أو أنشئ حساباً للمتابعة',
+    signinToAnalyze: 'سجّل الدخول أو أنشئ حساباً مجانياً لفحص الكود بالذكاء الاصطناعي',
     tabs: { bugs: 'تحليل الأخطاء والسبب الجذري', fix: 'الإصلاح المقترح', optimize: 'التحسين وأفضل الممارسات' },
     rootCause: 'السبب الجذري',
     noBugs: 'لم يتم العثور على أخطاء.',
@@ -220,13 +167,12 @@ const t = {
     copyExplanation: 'نسخ الشرح',
     lines: 'سطر',
     chars: 'حرف',
-    status: { missing: 'المفتاح مفقود', checking: 'جاري الفحص', error: 'خطأ في الاتصال', online: 'متصل', ready: 'جاهز' },
+    status: { checking: 'جاري الفحص', error: 'خطأ في الاتصال', online: 'متصل', ready: 'جاهز' },
     auth: {
       login: 'تسجيل الدخول',
       signupButton: 'إنشاء حساب',
       signinTitle: 'تسجيل الدخول',
       signupTitle: 'إنشاء حساب',
-      limitNotice: 'استخدمت تجربتك المجانية. سجّل الدخول أو أنشئ حساباً لمواصلة فحص الكود.',
       featureNotice: 'هذه الميزة متاحة بحساب مجاني. أنشئ حساباً أو سجّل الدخول لاستخدامها.',
       name: 'الاسم',
       email: 'البريد الإلكتروني',
@@ -248,8 +194,6 @@ const t = {
       backToSignin: 'العودة لتسجيل الدخول',
     },
     errors: {
-      // ⁦…⁩ (⁦…⁩) يعزلان الأسماء اللاتينية حتى لا تقفز نقطة .env لطرفها الخطأ داخل الجملة العربية
-      noKey: 'لم يتم العثور على مفتاح ⁦VITE_GEMINI_API_KEY⁩ في ملف ⁦.env⁩. أضفه ثم أعد تشغيل خادم التطوير.',
       request: 'تعذر الحصول على نتيجة.',
       badResponse: 'وصل رد غير مفهوم من الذكاء الاصطناعي. حاول مرة أخرى.',
       network: 'انتهت مهلة الاتصال بالذكاء الاصطناعي أو انقطع الاتصال. حاول مرة أخرى.',
@@ -272,8 +216,7 @@ const t = {
     analyze: 'Analyze code with AI',
     analyzing: 'Analyzing and extracting errors...',
     newReview: 'New review',
-    freeLeft: 'You have 1 free review — sign in for unlimited reviews',
-    freeUsed: 'Your free review is used — sign in or create an account to continue',
+    signinToAnalyze: 'Log in or create a free account to review code with AI',
     tabs: { bugs: 'Bug Analysis & Root Cause', fix: 'Suggested Code Fix', optimize: 'Optimization & Best Practices' },
     rootCause: 'Root Cause',
     noBugs: 'No bugs found.',
@@ -297,13 +240,12 @@ const t = {
     copyExplanation: 'Copy Explanation',
     lines: 'lines',
     chars: 'chars',
-    status: { missing: 'Key missing', checking: 'Analyzing', error: 'Connection error', online: 'Online', ready: 'Ready' },
+    status: { checking: 'Analyzing', error: 'Connection error', online: 'Online', ready: 'Ready' },
     auth: {
       login: 'Log in',
       signupButton: 'Sign up',
       signinTitle: 'Log in',
       signupTitle: 'Create account',
-      limitNotice: 'You have used your free review. Log in or create an account to keep analyzing code.',
       featureNotice: 'This feature comes with a free account. Create one or log in to use it.',
       name: 'Name',
       email: 'Email',
@@ -325,7 +267,6 @@ const t = {
       backToSignin: 'Back to log in',
     },
     errors: {
-      noKey: 'VITE_GEMINI_API_KEY was not found in .env. Add it and restart the dev server.',
       request: 'Could not get a result.',
       badResponse: 'The AI returned a response that could not be read. Please try again.',
       network: 'The AI request timed out or the connection dropped. Please try again.',
@@ -336,7 +277,6 @@ const t = {
 type ErrorKey = keyof (typeof t)['en']['errors']
 
 const STATUS_STYLES = {
-  missing: 'bg-red-500',
   checking: 'bg-amber-400 animate-pulse',
   error: 'bg-red-500',
   online: 'bg-emerald-500',
@@ -402,16 +342,14 @@ function App() {
   const [tab, setTab] = useState<Tab>('bugs')
   const [copied, setCopied] = useState<'code' | 'explanation' | null>(null)
 
-  // حالات الحساب والتجربة المجانية
-  // shortcut: حد التجربة المجانية للزائر محفوظ في المتصفح ويمكن تجاوزه بمسح بياناته؛ انقله لخادم إذا صار مهماً
+  // حالات الحساب؛ الفحص بالذكاء الاصطناعي للمسجّلين فقط لأن دالة الخادم ترفض غيرهم
   const auth = useAuth()
   const { account: user, loaded: accountLoaded, settings: accountSettings, save, saveSettings, remove } = useAccount()
   const [accountTab, setAccountTab] = useState<AccountTab | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
-  const [freeUsed, setFreeUsed] = useStored(KEYS.freeUsed, 0, parseCount)
   const [authMode, setAuthMode] = useState<AuthMode>('signin')
-  // سبب فتح نافذة الدخول: انتهاء الفحص المجاني أو ميزة للمسجّلين، ويظهر كتنبيه فوق النموذج
-  const [authNotice, setAuthNotice] = useState<'limit' | 'feature' | null>(null)
+  // سبب فتح نافذة الدخول (ميزة للمسجّلين)، ويظهر كتنبيه فوق النموذج
+  const [authNotice, setAuthNotice] = useState<'feature' | null>(null)
   // نتيجة آخر إرسال للنموذج: خطأ من Supabase أو تعليمات مثل "افتح بريدك"
   const [authAlert, setAuthAlert] = useState<{ text: string; error: boolean } | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
@@ -423,8 +361,7 @@ function App() {
   const language = active.language
   const hasCode = files.some((f) => f.content.trim())
   const current = LANGUAGES.find((l) => l.id === language) ?? LANGUAGES[0]
-  const apiStatus = !API_KEY ? 'missing' : loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
-  const freeLeft = Math.max(0, FREE_TRIES - freeUsed)
+  const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
   // تتحول واجهة البداية إلى مساحة عمل بعمودين عند بدء الفحص
   const panelOpen = Boolean(review || error || loading)
 
@@ -451,7 +388,7 @@ function App() {
     { dependencies: [review, error, panelOpen] }
   )
 
-  const openAuth = (mode: AuthMode, notice: 'limit' | 'feature' | null = null) => {
+  const openAuth = (mode: AuthMode, notice: 'feature' | null = null) => {
     // المسجّل لا يحتاج نافذة الدخول؛ أزرار "أنشئ حساباً" تفتح له إدارة الحساب
     if (user) return setAccountTab('profile')
     setAuthMode(mode)
@@ -465,14 +402,12 @@ function App() {
 
   const closeAuth = () => authRef.current?.close()
 
-  // shortcut: القيود في الواجهة فقط ويمكن تجاوزها من أدوات المطوّر؛ تصبح حقيقية عند نقلها لخادم مع الحسابات
-  // يكمل الإجراء للمسجّل، ويفتح للزائر نافذة إنشاء حساب مع سبب المنع
+  // الفحص بالذكاء الاصطناعي وحده يحتاج حساباً (دالة الخادم ترفض غيره)؛ يفتح للزائر نافذة إنشاء حساب مع السبب
   const needsAccount = () => {
     if (user) return false
     openAuth('signup', 'feature')
     return true
   }
-  const lockedLanguage = (id: string) => !user && !GUEST_LANGUAGES.has(id)
 
   const switchAuth = (mode: AuthMode) => {
     setAuthMode(mode)
@@ -555,6 +490,57 @@ function App() {
     return () => clearTimeout(timer)
   }, [historyLoaded, active.id, active.name, active.language, active.content, history, setHistory])
 
+  // ملفات المسجّل في مشروعه على Supabase؛ التبويبات المفتوحة هي المشروع
+  const { projects, failed: projectsFailed } = useProjects()
+  // عند تحميل المشروع تحل ملفاته محل التبويبات، ويُضاف إليها ما كتبه الزائر قبل تسجيل الدخول حتى لا يضيع
+  const { files: cloudFiles, failed: filesFailed, sync: syncFiles } = useFiles(projects?.[0]?.id ?? null, (cloudFiles) => {
+    const taken = cloudFiles.map((f) => f.name)
+    const guestWork = files
+      .filter((f) => f.content.trim() && !isExample(f.content) && !cloudFiles.some((c) => c.id === f.id))
+      .map((f) => {
+        const name = uniqueName(f.name, taken)
+        taken.push(name)
+        return { ...f, name }
+      })
+    const merged = [...cloudFiles, ...guestWork]
+    // مشروع جديد فارغ يأخذ التبويبات الحالية كما هي، فتُرفع في المزامنة التالية
+    if (!merged.length) return
+    setFiles(merged)
+    setActiveId((guestWork[0] ?? merged[0]).id)
+  })
+
+  // البديل عند فشل التحميل: المحرر يبقى يعمل محلياً بلا مزامنة (حتى لا تُحذف ملفات لم تُحمَّل)، ورسالة واحدة تشرح ذلك
+  const cloudFailed = projectsFailed || filesFailed
+  useEffect(() => {
+    if (cloudFailed) notify(wc.toasts.loadFailed, 'error')
+  }, [cloudFailed, wc.toasts.loadFailed])
+
+  // كل تعديل أو إضافة أو إغلاق يُرفع بعد توقف الكتابة؛ رسالة الفشل تظهر مرة حتى تنجح مزامنة
+  const syncFailed = useRef(false)
+  useEffect(() => {
+    if (!cloudFiles) return
+    const timer = setTimeout(async () => {
+      const ok = await syncFiles(files)
+      if (!ok && !syncFailed.current) notify(wc.toasts.syncFailed, 'error')
+      syncFailed.current = !ok
+    }, SYNC_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [files, cloudFiles, syncFiles, wc.toasts.syncFailed])
+
+  // الخروج يعيد المحرر لملف بداية بمعرّف جديد، حتى لا تُرفع ملفات حساب إلى حساب آخر يدخل بعده
+  const signedIn = Boolean(auth.user)
+  const wasSignedIn = useRef(signedIn)
+  useEffect(() => {
+    if (wasSignedIn.current && !signedIn) {
+      const starter = { ...FIRST_FILE, id: newId() }
+      setFiles([starter])
+      setActiveId(starter.id)
+      setReview(null)
+      setError(null)
+    }
+    wasSignedIn.current = signedIn
+  }, [signedIn])
+
   const openRecent = (entry: HistoryEntry) => {
     const open = files.find((f) => f.id === entry.id)
     if (open) {
@@ -562,12 +548,13 @@ function App() {
       setRecentOpen(false)
       return
     }
-    // فتح ملف من السجل يضيف تبويباً، وتعدد الملفات للمسجّلين
+    // فتح ملف من السجل يضيف تبويباً
     setRecentOpen(false)
-    if (needsAccount()) return
     const name = uniqueName(entry.name, files.map((f) => f.name))
-    setFiles((all) => [...all, { id: entry.id, name, language: entry.language, content: entry.content }])
-    setActiveId(entry.id)
+    // معرّف جديد: السجل مشترك بين حسابات هذا المتصفح، ومعرّف ملف حساب آخر سيرفضه الخادم عند المزامنة
+    const id = newId()
+    setFiles((all) => [...all, { id, name, language: entry.language, content: entry.content }])
+    setActiveId(id)
     notify(wc.toasts.opened(name), 'success')
   }
 
@@ -634,10 +621,7 @@ function App() {
     const name = raw.trim()
     // الأسماء فريدة لأن إصلاحات الذكاء الاصطناعي تُطبَّق على الملفات بأسمائها
     if (!name || name === file.name || files.some((f) => f.name === name)) return
-    const nextLanguage = languageOf(name, file.language)
-    // تغيير الامتداد طريق آخر لاختيار لغة، فيخضع لقيد اللغات نفسه
-    if (nextLanguage !== file.language && lockedLanguage(nextLanguage) && needsAccount()) return
-    updateFile(file.id, { name, language: nextLanguage })
+    updateFile(file.id, { name, language: languageOf(name, file.language) })
   }
 
   // كل ملف مستورد يفتح في تبويب جديد بلغة امتداده، وأولها يصبح النشط
@@ -724,81 +708,31 @@ function App() {
     notify(wc.toasts.classFilesCreated(created.length), 'success')
   }
 
-  // دالة فحص كل ملفات المشروع عبر Gemini API
+  // يرسل ملفات المشروع لدالة gemini على Supabase، وهي التي تحمل مفتاح Gemini وتجرّب النماذج بالترتيب
   const analyzeCode = async (): Promise<void> => {
-    if (!hasCode) return
-    if (!user && freeLeft === 0) {
-      openAuth('signin', 'limit')
-      return
-    }
-
+    if (!hasCode || needsAccount()) return
     setReview(null)
-    if (!API_KEY) {
-      setError({ key: 'noKey' })
-      return
-    }
-
     setLoading(true)
     setError(null)
-
-    const project = files
-      .map((f) => `File: ${f.name} (${LANGUAGES.find((l) => l.id === f.language)?.label ?? f.language})\n\`\`\`\n${f.content}\n\`\`\``)
-      .join('\n\n')
-
-    const promptText = `You are an expert code reviewer. Below is a project of ${files.length} file(s): ${files.map((f) => f.name).join(', ')}.
-Analyze the whole project together, including how the files interact (e.g. a main method using classes from other files), for syntax errors, logical bugs and object-oriented structure problems.
-Return:
-- "ar" and "en": the same review written in Arabic ("ar") and in English ("en"), each with:
-  - "bugs": each error found, naming the file it is in (empty if none)
-  - "rootCause": why the errors happen
-  - "fixes": how to fix each one
-  - "optimizations": performance, readability, OOP structure and best-practice suggestions
-- "fixedFiles": for each existing file that needs changes, its exact existing file name and full corrected content (empty if nothing needs fixing)
-- "renamedFiles": files whose name must change, as {"from": exact existing name, "to": new name}. When a file name does not match the class it declares (e.g. "main.java" declaring "public class Main"), rename the file to match the class; never rename the class in code just to match its file name (empty if none)
-- "suggestedFiles": when the code uses classes that no file defines, or one file holds several classes that belong in separate files (e.g. Java requires one public class per file), one entry per class, named after the class with the right extension (e.g. "VIP.java"), with its full code. Never include a file name that already exists. If you move a class out of a file, also return that file without it in "fixedFiles" (empty if none)
-Keep code identifiers unchanged in both languages.
-
-${project}`
-
-    let lastError: { key: ErrorKey; detail?: string } = { key: 'network' }
     try {
-      for (const model of GEMINI_MODELS) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: promptText }] }],
-              generationConfig: { responseMimeType: 'application/json', responseSchema: REVIEW_SCHEMA },
-            }),
-            signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
-          })
-
-          const data: GeminiResponse = await response.json()
-          if (response.ok) {
-            const parsed = parseReview(data.candidates?.[0]?.content?.parts?.[0]?.text ?? '')
-            if (parsed) {
-              setReview(parsed)
-              setLastModel(model)
-              setTab('bugs')
-              // تُحتسب التجربة المجانية فقط عند نجاح الفحص
-              if (!user) {
-                setFreeUsed(freeUsed + 1)
-              }
-              return
-            }
-            lastError = { key: 'badResponse' }
-            continue
-          }
-          lastError = { key: 'request', detail: `(${response.status}) ${data.error?.message ?? ''}` }
-          // خطأ في المفتاح أو الطلب لن يُحل بتجربة نموذج آخر
-          if ([400, 401, 403].includes(response.status)) break
-        } catch (err) {
-          console.error(model, err)
-          lastError = { key: 'network' }
-        }
+      const { data, error } = await supabase.functions.invoke<{ text: string; model: string }>('gemini', {
+        body: {
+          files: files.map((f) => ({ name: f.name, language: LANGUAGES.find((l) => l.id === f.language)?.label ?? f.language, content: f.content })),
+        },
+      })
+      if (error) {
+        // ردّ HTTP من غير دالتنا (مثل 404 دالة غير منشورة) يُعرض برقمه ورسالته؛ بلا ردّ إطلاقاً يعني انقطاع الاتصال
+        if (!(error instanceof FunctionsHttpError)) return setError({ key: 'network' })
+        const reply = await error.context.json().catch(() => null)
+        if (reply?.error in tr.errors) return setError({ key: reply.error as ErrorKey, detail: reply.detail })
+        return setError({ key: 'request', detail: `(${error.context.status}) ${reply?.message ?? ''}` })
       }
-      setError(lastError)
+      // الرد قادم من الذكاء الاصطناعي عبر الخادم، فيُتحقق من شكله هنا أيضاً
+      const parsed = data && parseReview(data.text)
+      if (!parsed) return setError({ key: 'badResponse' })
+      setReview(parsed)
+      setLastModel(data.model)
+      setTab('bugs')
     } finally {
       setLoading(false)
     }
@@ -884,26 +818,23 @@ ${project}`
                     }}
                     hidden
                   />
-                  <button onClick={() => needsAccount() || newFile()} className={labelButton}>
+                  <button onClick={newFile} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 12v6M9 15h6" />
                     </svg>
                     {tr.files.new}
-                    {!user && <LockIcon />}
                   </button>
-                  <button onClick={() => needsAccount() || importRef.current?.click()} className={labelButton}>
+                  <button onClick={() => importRef.current?.click()} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
                     </svg>
                     {tr.files.import}
-                    {!user && <LockIcon />}
                   </button>
-                  <button onClick={() => needsAccount() || exportFile()} disabled={!code} className={labelButton}>
+                  <button onClick={exportFile} disabled={!code} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
                     </svg>
                     {tr.files.export}
-                    {!user && <LockIcon />}
                   </button>
                   <button onClick={() => setRenamingId(active.id)} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -1025,8 +956,6 @@ ${project}`
                     dir="ltr"
                     value={language}
                     onChange={(e) => {
-                      // القائمة مربوطة بلغة الملف، فرفض الاختيار يُبقيها على اللغة الحالية تلقائياً
-                      if (lockedLanguage(e.target.value) && needsAccount()) return
                       const untouched = !code.trim() || current.examples.includes(code)
                       selectLanguage(e.target.value, untouched || window.confirm(tr.replaceCode) ? CLEAN_EXAMPLE : undefined)
                     }}
@@ -1035,7 +964,7 @@ ${project}`
                   >
                     {LANGUAGES.map((l) => (
                       <option key={l.id} value={l.id}>
-                        {lockedLanguage(l.id) ? `${l.label} 🔒` : l.label}
+                        {l.label}
                       </option>
                     ))}
                   </select>
@@ -1061,12 +990,14 @@ ${project}`
                     <button
                       onClick={analyzeCode}
                       disabled={loading || !hasCode}
-                      aria-label={loading ? tr.analyzing : tr.analyze}
-                      title={tr.analyze}
+                      aria-label={loading ? tr.analyzing : user ? tr.analyze : tr.signinToAnalyze}
+                      title={user ? tr.analyze : tr.signinToAnalyze}
                       className="ms-1 grid size-9 place-items-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                     >
                       {loading ? (
                         <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                      ) : !user ? (
+                        <LockIcon className="size-4" />
                       ) : (
                         <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                           <path d="M5 12h14M13 6l6 6-6 6" />
@@ -1192,21 +1123,19 @@ ${project}`
                   {review && (
                     <div className="flex shrink-0 flex-wrap gap-2 border-t border-line p-2">
                       <button
-                        onClick={() => needsAccount() || applyFix()}
+                        onClick={applyFix}
                         disabled={!fixable.length && !renames.length}
                         className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                       >
                         {tr.applyFix}
-                        {!user && <LockIcon />}
                       </button>
                       {review.suggestedFiles.length > 0 && (
                         <button
-                          onClick={() => needsAccount() || createSuggestedFiles()}
+                          onClick={createSuggestedFiles}
                           disabled={!newClassFiles.length}
                           className={`${chip} flex items-center gap-1.5 disabled:opacity-40`}
                         >
                           {tr.createFiles} ({newClassFiles.length})
-                          {!user && <LockIcon />}
                         </button>
                       )}
                       <button onClick={() => copy(explanationText, 'explanation')} className={chip}>
@@ -1218,10 +1147,10 @@ ${project}`
               )}
             </div>
 
-            {/* تنبيه التجربة المجانية للزائر */}
+            {/* تنبيه الزائر: الفحص يحتاج حساباً */}
             {!user && (
               <button onClick={() => openAuth('signup')} className="text-xs text-ink-2 underline-offset-4 hover:text-accent hover:underline">
-                {freeLeft > 0 ? tr.freeLeft : tr.freeUsed}
+                {tr.signinToAnalyze}
               </button>
             )}
 
@@ -1256,7 +1185,7 @@ ${project}`
         <LandingSections lang={lang} exampleNames={tr.exampleNames} onSignup={() => openAuth('signup')} />
       </main>
 
-      {/* نافذة تسجيل الدخول وإنشاء الحساب — تفتح من الهيدر أو عند انتهاء التجربة المجانية */}
+      {/* نافذة تسجيل الدخول وإنشاء الحساب — تفتح من الهيدر أو عند محاولة الزائر استخدام ميزة للمسجّلين */}
       <dialog
         ref={authRef}
         onClose={() => {
@@ -1279,7 +1208,7 @@ ${project}`
             </div>
             {authNotice && (
               <p className="rounded-lg border border-accent/40 bg-accent-soft/50 p-3 text-sm">
-                {authNotice === 'limit' ? tr.auth.limitNotice : tr.auth.featureNotice}
+                {tr.auth.featureNotice}
               </p>
             )}
             {authMode === 'signup' && (

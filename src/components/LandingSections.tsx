@@ -3,7 +3,7 @@ import { useLenis } from 'lenis/react'
 import { ArrowIcon, CheckIcon } from '@/components/Icons'
 import SplitText from '@/components/SplitText'
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap'
-import { GUEST_LANGUAGE_COUNT, LANGUAGES } from '@/lib/languages'
+import { LANGUAGES } from '@/lib/languages'
 
 type Lang = 'ar' | 'en'
 
@@ -18,7 +18,7 @@ const copy = {
   ar: {
     meetTitle: 'تعرّف على المحرر الذكي',
     meetSub: `اكتشف أخطاء كودك في ${LANGUAGES.length} لغة، واقرأ شرحها بالعربية أو الإنجليزية، ثم أصلحها بنقرة واحدة.`,
-    free: { title: 'ابدأ بدون حساب', body: 'فحصك الأول مجاني بالكامل، بلا تسجيل.' },
+    free: { title: 'سجّل الدخول وابدأ', body: 'الفحص بالذكاء الاصطناعي يحتاج حساباً مجانياً بالبريد، وملفاتك تُحفظ فيه.' },
     bilingual: {
      
       title: 'شرح بلغتك',
@@ -29,7 +29,7 @@ const copy = {
     },
     langs: { title: 'محرر واحد لكل اللغات', body: 'من JavaScript إلى Rust وSQL، مع تلوين الكود لكل لغة.' },
     fix: { title: 'طبّق الإصلاح فوراً', body: 'زر واحد يستبدل الكود بالنسخة المصححة.' },
-    tryNow: 'جرّب الآن',
+    tryNow: 'ابدأ الآن',
     howLink: 'كيف يعمل؟',
     howTitle: 'كيف يعمل المحرر',
     steps: [
@@ -38,14 +38,14 @@ const copy = {
       { title: 'يحلل الذكاء الاصطناعي.', body: 'يكتشف Gemini الأخطاء النحوية والمنطقية.' },
       { title: 'طبّق الإصلاح.', body: 'انسخ الشرح أو طبّق الكود المصحح بنقرة.' },
     ],
-    plansTitle: 'ابدأ مجاناً، وتوسّع لاحقاً',
-    plansSub: 'جرّب المحرر كزائر، ثم أنشئ حساباً مجانياً للفحص بلا حدود.',
+    plansTitle: 'حساب مجاني، فحص بلا حدود',
+    plansSub: 'فحص الكود بالذكاء الاصطناعي متاح بعد تسجيل الدخول فقط. أنشئ حسابك بالبريد مجاناً.',
     plans: [
-      { name: 'زائر', price: 'مجاني', note: 'بدون تسجيل', features: ['فحص مجاني واحد', `أشهر ${GUEST_LANGUAGE_COUNT} لغات`, 'ملف واحد في المحرر', 'الشرح بالعربية والإنجليزية'], cta: 'جرّب الآن', badge: '' },
-      { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['فحص بلا حدود', `كل اللغات الـ${LANGUAGES.length}`, 'ملفات متعددة، واستيراد وحفظ', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
+      { name: 'زائر', price: 'مجاني', note: 'بدون فحص بالذكاء الاصطناعي', features: ['المحرر كاملاً مع الأمثلة', `كل اللغات الـ${LANGUAGES.length}`, 'ملفات متعددة، واستيراد وحفظ', 'الواجهة بالعربية والإنجليزية'], cta: 'تصفّح المحرر', badge: '' },
+      { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['فحص بالذكاء الاصطناعي بلا حدود', 'الشرح بالعربية والإنجليزية', 'ملفاتك محفوظة في حسابك', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
     ],
-    ctaTitle: 'فحصك الأول مجاني.',
-    ctaButton: 'افحص الكود الآن',
+    ctaTitle: 'سجّل الدخول وافحص كودك.',
+    ctaButton: 'أنشئ حساباً مجانياً',
     about: 'محرر أكواد يكتشف الأخطاء ويشرح حلها بالعربية والإنجليزية باستخدام الذكاء الاصطناعي.',
     footerTitle: 'المنتج',
     footerLinks: [
@@ -58,7 +58,7 @@ const copy = {
   en: {
     meetTitle: 'Meet Smart Code Editor',
     meetSub: `Find bugs in ${LANGUAGES.length} languages, read why in Arabic or English, and fix them in one click.`,
-    free: { title: 'Start without an account', body: 'Your first review is completely free, no sign-up.' },
+    free: { title: 'Log in to start', body: 'AI reviews need a free email account, and your files are saved to it.' },
     bilingual: {
      
       title: 'Explained in your language',
@@ -68,7 +68,7 @@ const copy = {
     },
     langs: { title: 'One editor, every language', body: 'From JavaScript to Rust and SQL, with highlighting for each.' },
     fix: { title: 'Apply the fix instantly', body: 'One button swaps your code for the corrected version.' },
-    tryNow: 'Try it now',
+    tryNow: 'Get started',
     howLink: 'How it works',
     howTitle: 'How the editor works',
     steps: [
@@ -77,14 +77,14 @@ const copy = {
       { title: 'AI reviews it.', body: 'Gemini finds syntax and logic errors.' },
       { title: 'Apply the fix.', body: 'Copy the explanation or apply the fix in one click.' },
     ],
-    plansTitle: 'Start free. Go unlimited.',
-    plansSub: 'Try the editor as a guest, then create a free account for unlimited reviews.',
+    plansTitle: 'Free account. Unlimited reviews.',
+    plansSub: 'AI code reviews are for signed-in users only. Create your account with your email, free.',
     plans: [
-      { name: 'Guest', price: 'Free', note: 'No sign-up', features: ['1 free review', `Top ${GUEST_LANGUAGE_COUNT} languages`, 'One file in the editor', 'Arabic & English explanations'], cta: 'Try it now', badge: '' },
-      { name: 'Account', price: 'Free', note: 'With your email', features: ['Unlimited reviews', `All ${LANGUAGES.length} languages`, 'Multiple files, import & save', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
+      { name: 'Guest', price: 'Free', note: 'No AI reviews', features: ['The full editor & examples', `All ${LANGUAGES.length} languages`, 'Multiple files, import & save', 'Arabic & English interface'], cta: 'Browse the editor', badge: '' },
+      { name: 'Account', price: 'Free', note: 'With your email', features: ['Unlimited AI reviews', 'Arabic & English explanations', 'Files saved to your account', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
     ],
-    ctaTitle: 'Your first review is free.',
-    ctaButton: 'Review my code',
+    ctaTitle: 'Log in and review your code.',
+    ctaButton: 'Create a free account',
     about: 'A code editor that finds bugs and explains the fix in Arabic and English using AI.',
     footerTitle: 'Product',
     footerLinks: [
@@ -160,10 +160,11 @@ export default function LandingSections({ lang, exampleNames, onSignup }: Props)
               <p className="mt-3 text-sm text-ink-2">{c.free.body}</p>
             </div>
             <div data-parallax className="ms-auto flex flex-col justify-center gap-3">
+              {/* المميَّز هو الخطأ المنطقي، المثال نفسه الذي يفتح عليه المحرر */}
               {exampleNames.map((name, i) => (
                 <span
                   key={name}
-                  className={`rounded-s-xl px-5 py-2 text-xl md:text-2xl ${i === 0 ? 'bg-accent text-on-accent' : 'text-ink/60'}`}
+                  className={`rounded-s-xl px-5 py-2 text-xl md:text-2xl ${i === 1 ? 'bg-accent text-on-accent' : 'text-ink/60'}`}
                 >
                   {name}
                 </span>
@@ -233,7 +234,7 @@ export default function LandingSections({ lang, exampleNames, onSignup }: Props)
         </ol>
       </section>
 
-      {/* الخطط: زائر أو حساب */}
+      {/* الخطط: زائر بلا فحص، أو حساب */}
       <section id="plans" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
         <SplitText
           text={c.plansTitle}
@@ -278,7 +279,7 @@ export default function LandingSections({ lang, exampleNames, onSignup }: Props)
         <SplitText text={c.ctaTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-[56px] ${tight}`} />
         <div data-reveal className="mt-8">
           <button
-            onClick={() => go('#top')}
+            onClick={onSignup}
             className={`inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
           >
             {c.ctaButton} <ArrowIcon />
