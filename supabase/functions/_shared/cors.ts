@@ -3,8 +3,9 @@
 const DEFAULT_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://smart-code-editor.vercel.app',
-  'https://smart-code-editor-*.vercel.app',
+  'https://smartcode-editor.vercel.app',
+  // Vercel preview deployments: <project>-<hash>-<team>.vercel.app, limited to this team so other Vercel projects can't match
+  'https://smart-code-editor-*-smart-code-editor-org.vercel.app',
 ]
 const ORIGIN_PATTERNS = (Deno.env.get('ALLOWED_ORIGINS')?.split(',') ?? DEFAULT_ORIGINS)
   .map((o) => o.trim())
