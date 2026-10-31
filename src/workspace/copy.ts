@@ -1,0 +1,48 @@
+export const workspaceCopy = {
+  ar: {
+    recent: 'الأخيرة',
+    recentTitle: 'الملفات الأخيرة',
+    recentEmpty: 'لا توجد ملفات بعد. يُحفظ هنا كل ملف تعمل عليه لتعود إليه لاحقاً.',
+    open: 'فتح',
+    remove: 'إزالة',
+    removeLabel: (name: string) => `إزالة ${name} من السجل`,
+    openLabel: (name: string) => `فتح ${name}`,
+    clear: 'مسح السجل',
+    clearConfirm: 'سيُحذف سجل الملفات الأخيرة كله. هل تريد المتابعة؟',
+    close: 'إغلاق',
+    toasts: {
+      opened: (name: string) => `فُتح ${name} في تبويب جديد.`,
+      removed: 'أُزيل الملف من السجل.',
+      cleared: 'تم مسح السجل.',
+      historyFailed: 'تعذّر حفظ السجل: التخزين في المتصفح ممتلئ أو محظور.',
+      fileSaved: (name: string) => `تم تنزيل ${name}.`,
+      filesImported: (n: number) => (n === 1 ? 'تم استيراد ملف واحد.' : `تم استيراد ${n} ملفات.`),
+      fixApplied: 'تم تطبيق الإصلاح.',
+      classFilesCreated: (n: number) => (n === 1 ? 'تم إنشاء ملف واحد.' : `تم إنشاء ${n} ملفات.`),
+    },
+  },
+  en: {
+    recent: 'Recent',
+    recentTitle: 'Recent files',
+    recentEmpty: 'No files yet. Every file you work on is kept here so you can come back to it.',
+    open: 'Open',
+    remove: 'Remove',
+    removeLabel: (name: string) => `Remove ${name} from history`,
+    openLabel: (name: string) => `Open ${name}`,
+    clear: 'Clear history',
+    clearConfirm: 'This deletes your whole recent files history. Continue?',
+    close: 'Close',
+    toasts: {
+      opened: (name: string) => `Opened ${name} in a new tab.`,
+      removed: 'Removed from history.',
+      cleared: 'History cleared.',
+      historyFailed: "Couldn't save the history: browser storage is full or blocked.",
+      fileSaved: (name: string) => `Downloaded ${name}.`,
+      filesImported: (n: number) => (n === 1 ? 'Imported 1 file.' : `Imported ${n} files.`),
+      fixApplied: 'Fix applied.',
+      classFilesCreated: (n: number) => (n === 1 ? 'Created 1 file.' : `Created ${n} files.`),
+    },
+  },
+}
+
+export type WorkspaceCopy = (typeof workspaceCopy)['ar']

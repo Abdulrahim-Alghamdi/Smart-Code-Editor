@@ -1,0 +1,317 @@
+import { useRef } from 'react'
+import { useLenis } from 'lenis/react'
+import { ArrowIcon, CheckIcon } from '@/components/Icons'
+import SplitText from '@/components/SplitText'
+import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap'
+import { GUEST_LANGUAGE_COUNT, LANGUAGES } from '@/lib/languages'
+
+type Lang = 'ar' | 'en'
+
+interface Props {
+  lang: Lang
+  exampleNames: string[]
+  onSignup: () => void
+}
+
+// نصوص أقسام الصفحة بالعربية والإنجليزية
+const copy = {
+  ar: {
+    meetTitle: 'تعرّف على المحرر الذكي',
+    meetSub: `اكتشف أخطاء كودك في ${LANGUAGES.length} لغة، واقرأ شرحها بالعربية أو الإنجليزية، ثم أصلحها بنقرة واحدة.`,
+    free: { title: 'ابدأ بدون حساب', body: 'فحصك الأول مجاني بالكامل، بلا تسجيل.' },
+    bilingual: {
+     
+      title: 'شرح بلغتك',
+      body: 'اختر العربية أو الإنجليزية ويصلك التحليل بنفس اللغة.',
+      ask: 'لماذا تُرجع الدالة NaN؟',
+      // ⁦…⁩ يعزلان الرموز حتى لا تنعكس < و <= داخل الجملة العربية
+      answer: 'الحلقة تتجاوز آخر عنصر في المصفوفة: استخدم ⁦<⁩ بدل ⁦<=⁩.',
+    },
+    langs: { title: 'محرر واحد لكل اللغات', body: 'من JavaScript إلى Rust وSQL، مع تلوين الكود لكل لغة.' },
+    fix: { title: 'طبّق الإصلاح فوراً', body: 'زر واحد يستبدل الكود بالنسخة المصححة.' },
+    tryNow: 'جرّب الآن',
+    howLink: 'كيف يعمل؟',
+    howTitle: 'كيف يعمل المحرر',
+    steps: [
+      { title: 'الصق الكود.', body: `أو اختر مثالاً جاهزاً من ${LANGUAGES.length} لغة.` },
+      { title: 'اختر اللغة.', body: 'تلوين وتدقيق حسب لغة البرمجة.' },
+      { title: 'يحلل الذكاء الاصطناعي.', body: 'يكتشف Gemini الأخطاء النحوية والمنطقية.' },
+      { title: 'طبّق الإصلاح.', body: 'انسخ الشرح أو طبّق الكود المصحح بنقرة.' },
+    ],
+    plansTitle: 'ابدأ مجاناً، وتوسّع لاحقاً',
+    plansSub: 'جرّب المحرر كزائر، ثم أنشئ حساباً مجانياً للفحص بلا حدود.',
+    plans: [
+      { name: 'زائر', price: 'مجاني', note: 'بدون تسجيل', features: ['فحص مجاني واحد', `أشهر ${GUEST_LANGUAGE_COUNT} لغات`, 'ملف واحد في المحرر', 'الشرح بالعربية والإنجليزية'], cta: 'جرّب الآن', badge: '' },
+      { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['فحص بلا حدود', `كل اللغات الـ${LANGUAGES.length}`, 'ملفات متعددة، واستيراد وحفظ', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
+    ],
+    ctaTitle: 'فحصك الأول مجاني.',
+    ctaButton: 'افحص الكود الآن',
+    about: 'محرر أكواد يكتشف الأخطاء ويشرح حلها بالعربية والإنجليزية باستخدام الذكاء الاصطناعي.',
+    footerTitle: 'المنتج',
+    footerLinks: [
+      ['المحرر', '#top'],
+      ['كيف يعمل', '#how'],
+      ['الخطط', '#plans'],
+    ],
+    rights: '© 2026 محرر الأكواد الذكي',
+  },
+  en: {
+    meetTitle: 'Meet Smart Code Editor',
+    meetSub: `Find bugs in ${LANGUAGES.length} languages, read why in Arabic or English, and fix them in one click.`,
+    free: { title: 'Start without an account', body: 'Your first review is completely free, no sign-up.' },
+    bilingual: {
+     
+      title: 'Explained in your language',
+      body: 'Pick Arabic or English and the analysis comes back in it.',
+      ask: 'Why does my function return NaN?',
+      answer: 'The loop reads past the last item: use < instead of <=.',
+    },
+    langs: { title: 'One editor, every language', body: 'From JavaScript to Rust and SQL, with highlighting for each.' },
+    fix: { title: 'Apply the fix instantly', body: 'One button swaps your code for the corrected version.' },
+    tryNow: 'Try it now',
+    howLink: 'How it works',
+    howTitle: 'How the editor works',
+    steps: [
+      { title: 'Paste your code.', body: `Or pick a ready example in ${LANGUAGES.length} languages.` },
+      { title: 'Pick the language.', body: 'Highlighting and checks per language.' },
+      { title: 'AI reviews it.', body: 'Gemini finds syntax and logic errors.' },
+      { title: 'Apply the fix.', body: 'Copy the explanation or apply the fix in one click.' },
+    ],
+    plansTitle: 'Start free. Go unlimited.',
+    plansSub: 'Try the editor as a guest, then create a free account for unlimited reviews.',
+    plans: [
+      { name: 'Guest', price: 'Free', note: 'No sign-up', features: ['1 free review', `Top ${GUEST_LANGUAGE_COUNT} languages`, 'One file in the editor', 'Arabic & English explanations'], cta: 'Try it now', badge: '' },
+      { name: 'Account', price: 'Free', note: 'With your email', features: ['Unlimited reviews', `All ${LANGUAGES.length} languages`, 'Multiple files, import & save', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
+    ],
+    ctaTitle: 'Your first review is free.',
+    ctaButton: 'Review my code',
+    about: 'A code editor that finds bugs and explains the fix in Arabic and English using AI.',
+    footerTitle: 'Product',
+    footerLinks: [
+      ['Editor', '#top'],
+      ['How it works', '#how'],
+      ['Plans', '#plans'],
+    ],
+    rights: '© 2026 Smart Code Editor',
+  },
+}
+
+const STEP_STYLES = ['bg-surface', 'bg-surface-2', 'bg-accent-soft', 'bg-accent text-on-accent']
+
+// ضغطة الأزرار: انكماش خفيف مع انتقال اللون
+const press = 'transition-[color,background-color,transform] duration-150 active:scale-[0.96]'
+
+export default function LandingSections({ lang, exampleNames, onSignup }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const lenis = useLenis()
+  const c = copy[lang]
+  const isEn = lang === 'en'
+  // تقليص المسافة بين الحروف يناسب الإنجليزية فقط؛ في العربية يقطع اتصال الحروف
+  const tight = isEn ? 'tracking-[-0.05em]' : ''
+  // ذيول الحروف العربية (ي ج ح) تنزل تحت السطر؛ 1.1 يقصها داخل صندوق حركة العنوان
+  const lead = isEn ? 'leading-[1.1]' : 'leading-[1.4]'
+  const cardTitle = `text-3xl leading-tight ${isEn ? 'tracking-[-0.03em]' : ''}`
+
+  const go = (target: string) => (lenis ? lenis.scrollTo(target, { offset: -80 }) : document.querySelector(target)?.scrollIntoView())
+
+  // حركات الظهور عند التمرير، تتوقف إذا طلب المستخدم تقليل الحركة
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia()
+      mm.add('(prefers-reduced-motion: no-preference)', () => {
+        const root = rootRef.current
+        gsap.utils.toArray<HTMLElement>('[data-reveal]', root).forEach((el) => {
+          gsap.from(el, { y: 32, opacity: 0, duration: 0.9, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 88%', once: true } })
+        })
+        const cards = gsap.utils.toArray<HTMLElement>('[data-card]', root)
+        gsap.set(cards, { y: 56, opacity: 0 })
+        ScrollTrigger.batch(cards, {
+          start: 'top 92%',
+          once: true,
+          onEnter: (els) => gsap.to(els, { y: 0, opacity: 1, duration: 0.8, stagger: 0.08, ease: 'power3.out' }),
+        })
+        gsap.utils.toArray<HTMLElement>('[data-parallax]', root).forEach((el) => {
+          gsap.fromTo(
+            el,
+            { yPercent: 14 },
+            { yPercent: -14, ease: 'none', scrollTrigger: { trigger: el.parentElement, start: 'top bottom', end: 'bottom top', scrub: true } }
+          )
+        })
+      })
+    },
+    { scope: rootRef }
+  )
+
+  return (
+    <div ref={rootRef}>
+      {/* تعرّف على المحرر: شبكة بطاقات بأربع مزايا */}
+      <section id="meet" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+        <div className="text-center">
+          <SplitText text={c.meetTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-7xl ${tight}`} />
+          <p data-reveal className="mt-3 text-ink-2">
+            {c.meetSub}
+          </p>
+        </div>
+
+        <div className="mt-10 grid gap-3 md:grid-cols-2">
+          <article data-card className="relative flex min-h-72 overflow-hidden rounded-2xl bg-accent-soft p-6 md:p-8">
+            <div className="max-w-56">
+              <h3 className={cardTitle}>{c.free.title}</h3>
+              <p className="mt-3 text-sm text-ink-2">{c.free.body}</p>
+            </div>
+            <div data-parallax className="ms-auto flex flex-col justify-center gap-3">
+              {exampleNames.map((name, i) => (
+                <span
+                  key={name}
+                  className={`rounded-s-xl px-5 py-2 text-xl md:text-2xl ${i === 0 ? 'bg-accent text-on-accent' : 'text-ink/60'}`}
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          </article>
+
+          <article
+            data-card
+            className="relative flex min-h-72 flex-col overflow-hidden rounded-2xl bg-page-2 p-6 md:p-8"
+          >
+            <h3 className={cardTitle}>{c.bilingual.title}</h3>
+            <p className="mt-3 max-w-64 text-sm text-ink-2">{c.bilingual.body}</p>
+            <div data-parallax className="mt-auto flex w-full max-w-xs flex-col gap-2 self-end pt-6">
+              <span className="self-end rounded-xl bg-surface-2 px-3 py-2 text-xs">{c.bilingual.ask}</span>
+              <span className="rounded-xl bg-accent px-3 py-2 text-xs text-on-accent">{c.bilingual.answer}</span>
+            </div>
+          </article>
+
+          <article data-card className="relative flex min-h-72 flex-col overflow-hidden rounded-2xl bg-surface-2 p-6 md:p-8">
+            <h3 className={cardTitle}>{c.langs.title}</h3>
+            <p className="mt-3 max-w-72 text-sm text-ink-2">{c.langs.body}</p>
+            <div data-parallax dir="ltr" className="mt-auto grid w-full max-w-72 grid-cols-4 gap-2 self-end pt-6">
+              {LANGUAGES.slice(0, 8).map((l) => (
+                <span key={l.id} className="grid aspect-square place-items-center rounded-lg bg-surface text-xs font-medium">
+                  {l.glyph}
+                </span>
+              ))}
+            </div>
+          </article>
+
+          <article data-card className="relative flex min-h-72 flex-col overflow-hidden rounded-2xl bg-accent p-6 text-on-accent md:p-8">
+            <h3 className={cardTitle}>{c.fix.title}</h3>
+            <p className="mt-3 max-w-64 text-sm text-on-accent/80">{c.fix.body}</p>
+            <div data-parallax className="mt-auto self-end pt-6">
+              <pre dir="ltr" className="overflow-x-auto rounded-xl bg-page p-4 text-left font-mono text-xs leading-6">
+                <span className="block text-red-200">- for (let i = 0; i &lt;= arr.length; i++)</span>
+                <span className="block text-emerald-200">+ for (let i = 0; i &lt; arr.length; i++)</span>
+              </pre>
+            </div>
+          </article>
+        </div>
+
+        <div data-reveal className="mt-8 flex items-center justify-center gap-6">
+          <button
+            onClick={() => go('#top')}
+            className={`inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
+          >
+            {c.tryNow} <ArrowIcon />
+          </button>
+          <button onClick={() => go('#how')} className="text-sm text-ink-2 hover:text-ink">
+            {c.howLink}
+          </button>
+        </div>
+      </section>
+
+      {/* كيف يعمل: أربع خطوات بتدرج لوني */}
+      <section id="how" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+        <SplitText text={c.howTitle} tag="h2" splitType="words" className={`w-full text-4xl ${lead} md:text-5xl ${tight}`} />
+        <ol className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {c.steps.map((step, i) => (
+            <li key={step.title} data-card className={`flex min-h-56 flex-col justify-end rounded-2xl p-6 ${STEP_STYLES[i]}`}>
+              <h3 className={cardTitle}>{step.title}</h3>
+              <p className="mt-3">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* الخطط: زائر أو حساب */}
+      <section id="plans" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+        <SplitText
+          text={c.plansTitle}
+          tag="h2"
+          splitType="words"
+          className={`w-full text-4xl ${lead} md:text-[64px] ${tight}`}
+        />
+        <p data-reveal className="mx-auto mt-4 max-w-md text-center text-ink-2">
+          {c.plansSub}
+        </p>
+        <div className="mt-10 grid gap-3 md:grid-cols-2">
+          {c.plans.map((plan, i) => (
+            <article key={plan.name} data-card className="flex flex-col rounded-2xl bg-surface p-6">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-ink-2">{plan.name}</p>
+                {plan.badge && <p className="text-sm text-accent">{plan.badge}</p>}
+              </div>
+              {/* line-height 1 من text-5xl يقص ذيل الجيم والياء في "مجاني" فيدخل في السطر الذي تحته */}
+              <p className={`mt-4 text-5xl ${isEn ? tight : 'leading-[1.4]'}`}>{plan.price}</p>
+              <p className="mt-3 text-sm text-ink-2">{plan.note}</p>
+              <ul className="mt-6 flex-1 space-y-2 text-sm">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2">
+                    <CheckIcon className="size-4 shrink-0 text-accent" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={i === 0 ? () => go('#top') : onSignup}
+                className={`mt-8 h-10 rounded-lg text-sm font-medium ${press} ${plan.badge ? 'bg-accent text-on-accent hover:bg-accent-hover' : 'bg-surface-2 text-ink hover:bg-line'}`}
+              >
+                {plan.cta}
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* دعوة للبدء */}
+      <section className="px-4 py-28 text-center">
+        <SplitText text={c.ctaTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-[56px] ${tight}`} />
+        <div data-reveal className="mt-8">
+          <button
+            onClick={() => go('#top')}
+            className={`inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
+          >
+            {c.ctaButton} <ArrowIcon />
+          </button>
+        </div>
+      </section>
+
+      <footer className="bg-page-2">
+        <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-16 md:grid-cols-[2fr_1fr] md:px-8">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="grid size-7 place-items-center rounded-md bg-accent text-xs font-bold text-on-accent" aria-hidden="true">
+                {'{}'}
+              </span>
+              <span className="text-xl font-medium">{isEn ? 'Smart Code Editor' : 'محرر الأكواد الذكي'}</span>
+            </div>
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">{c.about}</p>
+          </div>
+          <nav aria-label={c.footerTitle}>
+            <h2 className="text-sm font-semibold">{c.footerTitle}</h2>
+            <ul className="mt-4 space-y-2 text-sm text-ink-2">
+              {c.footerLinks.map(([label, target]) => (
+                <li key={target}>
+                  <button onClick={() => go(target)} className="hover:text-ink">
+                    {label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+        <p className="mx-auto max-w-[1280px] px-4 pb-8 text-xs text-ink-2 md:px-8">{c.rights}</p>
+      </footer>
+    </div>
+  )
+}

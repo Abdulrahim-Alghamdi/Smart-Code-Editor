@@ -1,0 +1,79 @@
+@import 'tailwindcss';
+@import 'lenis/dist/lenis.css';
+
+/* ألوان الواجهة كمتغيرات حتى تُعدَّل من مكان واحد */
+@theme inline {
+  --color-page: var(--page);
+  --color-page-2: var(--page-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-mid: var(--accent-mid);
+  --color-on-accent: var(--on-accent);
+  --font-sans: 'Inter', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* الموقع داكن فقط: ألوان دافئة مشتقة من دراسة الصفحة المرجعية */
+:root {
+  --page: #0f0d0c;
+  --page-2: #161311;
+  --surface: #1c1917;
+  --surface-2: #26221f;
+  --line: #2f2a26;
+  --line-strong: #4a433d;
+  --ink: #f4f1ed;
+  --ink-2: #a8a29c;
+  --accent: #ff4d14;
+  --accent-hover: #ff6a3a;
+  --accent-soft: #4a2213;
+  --accent-mid: #8a3412;
+  --on-accent: #ffffff;
+  color-scheme: dark;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  @apply bg-page text-ink;
+}
+
+/* الواجهة LTR في اللغتين؛ كل فقرة عربية تُقرأ باتجاهها حتى لا تقفز النقطة والكلمات اللاتينية لطرفها الخطأ.
+   المحاذاة left وليست start على الجذر، لأن start مع plaintext تصير يميناً للعربية؛ وما توسّطه text-center يبقى متوسطاً */
+@layer base {
+  html:lang(ar) {
+    text-align: left;
+  }
+  /* .split-parent مستثنى: كلماته صناديق inline-block لا يرى plaintext حروفها فيعود لـ LTR ويقلب العنوان؛ اتجاهه من dir="auto" */
+  :lang(ar) :where(h1, h2, h3, h4, p, li, label, span, a, button, blockquote, dt, dd):not(.split-parent) {
+    unicode-bidi: plaintext;
+  }
+}
+
+/* شريط تمرير بألوان الواجهة لشريط التبويبات؛ كروم يتجاهل ::-webkit-scrollbar إذا وُجد scrollbar-width، لذا الخاصية القياسية لفايرفوكس فقط */
+@utility tab-scrollbar {
+  &::-webkit-scrollbar {
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: var(--line-strong);
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-2);
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
