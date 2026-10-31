@@ -1,10 +1,6 @@
 import { useRef, useState, type SubmitEvent } from 'react'
-import { input, outlineButton } from '@/lib/ui'
+import { dangerButton, input, outlineButton } from '@/lib/ui'
 import type { AccountCopy } from './copy'
-
-// زر الحذف بلون تحذيري صريح، مختلف عن زر الإجراء البرتقالي العادي
-const dangerButton =
-  'h-9 rounded-lg bg-red-600 px-3 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-40 disabled:hover:bg-red-600'
 
 export function DangerZoneTab({ copy, email, onDelete }: { copy: AccountCopy; email: string; onDelete: () => void }) {
   const confirmRef = useRef<HTMLDialogElement>(null)

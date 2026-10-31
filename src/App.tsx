@@ -19,6 +19,8 @@ import { AccountDialog, type AccountTab } from '@/account/AccountDialog'
 import { AccountMenu } from '@/account/AccountMenu'
 import { accountCopy } from '@/account/copy'
 import { Toast, type ToastMessage } from '@/account/Toast'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfirm } from '@/lib/useConfirm'
 import { useAccount } from '@/account/useAccount'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -136,7 +138,6 @@ const t = {
     toggleLabel: 'التبديل إلى الإنجليزية',
     scrollDown: 'انتقل إلى المزايا',
     language: 'لغة البرمجة',
-    replaceCode: 'سيُستبدل الكود الحالي بمثال تجريبي للغة الجديدة. هل تريد المتابعة؟',
     tryExample: 'جرّب مثالاً',
     exampleNames: ['خطأ نحوي', 'خطأ منطقي', 'كود نظيف'],
     copyCode: 'نسخ الكود',
@@ -160,7 +161,6 @@ const t = {
       rename: 'اسم الملف',
       renameAction: 'إعادة تسمية',
       renameHint: 'انقر مرتين أو اضغط F2 لإعادة التسمية',
-      confirmClose: 'سيُفقد محتوى هذا الملف. هل تريد إغلاقه؟',
       import: 'استيراد',
       export: 'حفظ',
       importSkipped: 'لم تُستورد هذه الملفات لأنها ليست نصية أو أكبر من 1 ميغابايت:',
@@ -214,7 +214,6 @@ const t = {
     toggleLabel: 'Switch to Arabic',
     scrollDown: 'Scroll to features',
     language: 'Language',
-    replaceCode: 'Your current code will be replaced with a demo for the new language. Continue?',
     tryExample: 'Try an example',
     exampleNames: ['Syntax Error', 'Logic Bug', 'Clean Code'],
     copyCode: 'Copy Code',
@@ -238,7 +237,6 @@ const t = {
       rename: 'File name',
       renameAction: 'Rename',
       renameHint: 'Double-click or press F2 to rename',
-      confirmClose: "This file's content will be lost. Close it?",
       import: 'Import',
       export: 'Save',
       importSkipped: 'These files were not imported because they are not text or are over 1 MB:',
@@ -358,6 +356,7 @@ function App() {
   // حالات الحساب؛ الفحص بالذكاء الاصطناعي للمسجّلين فقط لأن دالة الخادم ترفض غيرهم
   const auth = useAuth()
   const { account: user, loaded: accountLoaded, settings: accountSettings, save, saveSettings, remove } = useAccount()
+  const { confirm, pending: pendingConfirm, settle: settleConfirm } = useConfirm()
   const [accountTab, setAccountTab] = useState<AccountTab | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [authMode, setAuthMode] = useState<AuthMode>('signin')
@@ -516,6 +515,16 @@ function App() {
       setVersions([])
     })
 
+  // يثبّت المحتوى الحالي نسخةً في السجل قبل أي فعل يستبدله (استعادة، مسح، مثال لغة)، فيمكن الرجوع إليه
+  const keepVersion = () =>
+    localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content: active.content }, true).catch(console.error)
+
+  const clearEditor = async () => {
+    if (!(await confirm({ ...wc.confirms.clearEditor(active.name), cancel: wc.cancel, danger: true }))) return
+    await keepVersion()
+    setCode('')
+  }
+
   // بعد الحذف تُقرأ القائمة من جديد، فتعكس ما في التخزين فعلاً ولو فشل الحذف
   const deleteVersion = (snapshot: Snapshot) => localDb.deleteSnapshot(snapshot).catch(console.error).then(openVersions)
   const clearVersions = () => localDb.clearSnapshots(active.id).catch(console.error).then(openVersions)
@@ -523,9 +532,8 @@ function App() {
   // المحتوى الحالي يُثبَّت نسخةً قبل الاستعادة فيمكن الرجوع إليه، ثم تنتقل النسخة المستعادة للأعلى؛
   // فيجدها الحفظ التلقائي بعد الاستعادة أحدث نسخة ولا يكررها
   const restoreVersion = async (snapshot: Snapshot) => {
-    const file = { id: active.id, name: active.name, language: active.language }
-    await localDb.addSnapshot({ ...file, content: active.content }, true).catch(console.error)
-    await localDb.addSnapshot({ ...file, content: snapshot.content }, true).catch(console.error)
+    await keepVersion()
+    await localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content: snapshot.content }, true).catch(console.error)
     setCode(snapshot.content)
     setVersions(null)
     notify(wc.toasts.versionRestored, 'success')
@@ -724,9 +732,9 @@ function App() {
     notify(wc.toasts.fileSaved(name), 'success')
   }
 
-  const closeFile = (file: ProjectFile) => {
+  const closeFile = async (file: ProjectFile) => {
     if (files.length === 1) return
-    if (file.content.trim() && !window.confirm(`${file.name}\n${tr.files.confirmClose}`)) return
+    if (file.content.trim() && !(await confirm({ ...wc.confirms.closeFile(file.name), cancel: wc.cancel, danger: true }))) return
     const rest = files.filter((f) => f.id !== file.id)
     setFiles(rest)
     if (file.id === active.id) setActiveId(rest[Math.max(0, files.indexOf(file) - 1)].id)
@@ -1066,9 +1074,13 @@ function App() {
                   <select
                     dir="ltr"
                     value={language}
-                    onChange={(e) => {
+                    onChange={async (e) => {
+                      const id = e.target.value
                       const untouched = !code.trim() || current.examples.includes(code)
-                      selectLanguage(e.target.value, untouched || window.confirm(tr.replaceCode) ? CLEAN_EXAMPLE : undefined)
+                      const label = LANGUAGES.find((l) => l.id === id)?.label ?? id
+                      const replace = untouched || (await confirm({ ...wc.confirms.replaceCode(label), danger: true }))
+                      if (replace && !untouched) await keepVersion()
+                      selectLanguage(id, replace ? CLEAN_EXAMPLE : undefined)
                     }}
                     aria-label={tr.language}
                     className="rounded-lg bg-transparent px-2 py-1.5 text-sm text-ink hover:bg-surface"
@@ -1099,7 +1111,7 @@ function App() {
                         </svg>
                       )}
                     </button>
-                    <button onClick={() => setCode('')} disabled={!code} aria-label={tr.clear} title={tr.clear} className={iconButton}>
+                    <button onClick={clearEditor} disabled={!code} aria-label={tr.clear} title={tr.clear} className={iconButton}>
                       <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                         <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
                       </svg>
@@ -1455,9 +1467,11 @@ function App() {
         onRestore={restoreVersion}
         onDelete={deleteVersion}
         onClear={clearVersions}
+        confirm={confirm}
         lang={lang}
         copy={wc}
       />
+      <ConfirmDialog pending={pendingConfirm} onSettle={settleConfirm} />
       <Toast message={toast} onDone={clearToast} />
     </div>
   )

@@ -12,8 +12,32 @@ export const workspaceCopy = {
     restoreVersion: 'استعادة هذه النسخة',
     deleteVersion: (time: string) => `حذف نسخة ${time}`,
     clearVersions: 'حذف الكل',
-    clearVersionsConfirm: (name: string) => `ستُحذف كل نسخ ${name} من هذا الجهاز ولا يمكن استرجاعها. هل تريد المتابعة؟`,
     copyCode: 'نسخ الكود',
+    cancel: 'إلغاء',
+    // نوافذ التأكيد: عنوان يسمّي الفعل، ونص يقول ما سيضيع وهل يمكن استعادته
+    confirms: {
+      closeFile: (name: string) => ({
+        title: `إغلاق ${name}؟`,
+        body: 'سيُفقد محتوى هذا الملف، ويُحذف من حسابك إن كنت مسجّلاً.',
+        action: 'إغلاق الملف',
+      }),
+      clearEditor: (name: string) => ({
+        title: 'مسح المحرر؟',
+        body: `سيُمسح كل الكود في ${name}. يمكنك استعادته من السجل.`,
+        action: 'مسح',
+      }),
+      replaceCode: (language: string) => ({
+        title: 'استبدال الكود بمثال؟',
+        body: `سيحل مثال ${language} محل الكود الحالي. يمكنك استعادة كودك من السجل، أو الإبقاء عليه وتغيير اللغة فقط.`,
+        action: 'استبدال بالمثال',
+        cancel: 'إبقاء كودي',
+      }),
+      clearVersions: (name: string, n: number) => ({
+        title: 'حذف كل نسخ هذا الملف نهائياً؟',
+        body: `ستُحذف ${n === 1 ? 'النسخة الوحيدة' : `النسخ الـ ${n}`} من سجل ${name} على هذا الجهاز ولا يمكن استرجاعها. الكود الحالي في المحرر لا يتأثر.`,
+        action: 'حذف الكل',
+      }),
+    },
     copied: 'تم النسخ ✓',
     current: 'الحالية',
     lines: (n: number) => (n === 1 ? 'سطر واحد' : `${n} سطر`),
@@ -42,8 +66,31 @@ export const workspaceCopy = {
     restoreVersion: 'Restore version',
     deleteVersion: (time: string) => `Delete the version from ${time}`,
     clearVersions: 'Delete all',
-    clearVersionsConfirm: (name: string) => `Every version of ${name} will be deleted from this device and can't be recovered. Continue?`,
     copyCode: 'Copy code',
+    cancel: 'Cancel',
+    confirms: {
+      closeFile: (name: string) => ({
+        title: `Close ${name}?`,
+        body: "This file's content will be lost, and it's removed from your account if you're signed in.",
+        action: 'Close file',
+      }),
+      clearEditor: (name: string) => ({
+        title: 'Clear the editor?',
+        body: `All the code in ${name} will be cleared. You can bring it back from History.`,
+        action: 'Clear',
+      }),
+      replaceCode: (language: string) => ({
+        title: 'Replace your code with an example?',
+        body: `A ${language} example will replace your current code. You can get your code back from History, or keep it and only change the language.`,
+        action: 'Use the example',
+        cancel: 'Keep my code',
+      }),
+      clearVersions: (name: string, n: number) => ({
+        title: 'Delete all versions of this file permanently?',
+        body: `${n === 1 ? 'The only version' : `All ${n} versions`} of ${name} will be deleted from this device and can't be recovered. The code in the editor isn't affected.`,
+        action: 'Delete all',
+      }),
+    },
     copied: 'Copied ✓',
     current: 'Current',
     lines: (n: number) => (n === 1 ? '1 line' : `${n} lines`),

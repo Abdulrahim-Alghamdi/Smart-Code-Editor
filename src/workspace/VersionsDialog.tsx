@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { loader } from '@monaco-editor/react'
 import { accentButton, iconButton, outlineButton } from '@/lib/ui'
 import { SNAPSHOT_LIMIT, type Snapshot } from '@/services/localDb'
+import type { ConfirmRequest } from '@/lib/useConfirm'
 import type { WorkspaceCopy } from './copy'
 
 const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
@@ -54,11 +55,12 @@ interface Props {
   onRestore: (snapshot: Snapshot) => void
   onDelete: (snapshot: Snapshot) => void
   onClear: () => void
+  confirm: (request: ConfirmRequest) => Promise<boolean>
   lang: 'ar' | 'en'
   copy: WorkspaceCopy
 }
 
-export function VersionsDialog({ versions, fileName, current, onClose, onRestore, onDelete, onClear, lang, copy }: Props) {
+export function VersionsDialog({ versions, fileName, current, onClose, onRestore, onDelete, onClear, confirm, lang, copy }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const open = versions !== null
   // النسخة المفتوحة مربوطة بالقائمة التي فُتحت فيها، فكل فتح جديد للنافذة يبدأ مطوياً
@@ -143,7 +145,10 @@ export function VersionsDialog({ versions, fileName, current, onClose, onRestore
                         <span className="shrink-0 text-xs tabular-nums text-ink-2">{lines}</span>
                       )}
                     </button>
-                    <button type="button" onClick={() => onDelete(v)} aria-label={copy.deleteVersion(time)} title={copy.deleteVersion(time)} className={`${iconButton} shrink-0 hover:text-red-400`}>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(v)}
+                      aria-label={copy.deleteVersion(time)} title={copy.deleteVersion(time)} className={`${iconButton} shrink-0 hover:text-red-400`}>
                       <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                         <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
                       </svg>
@@ -177,7 +182,9 @@ export function VersionsDialog({ versions, fileName, current, onClose, onRestore
             <p className="text-xs text-ink-2">{copy.versionsNote(SNAPSHOT_LIMIT)}</p>
             <button
               type="button"
-              onClick={() => window.confirm(copy.clearVersionsConfirm(fileName)) && onClear()}
+              onClick={async () =>
+                (await confirm({ ...copy.confirms.clearVersions(fileName, versions.length), cancel: copy.cancel, danger: true })) && onClear()
+              }
               className={`${outlineButton} hover:border-red-400/60 hover:text-red-400`}
             >
               {copy.clearVersions}
