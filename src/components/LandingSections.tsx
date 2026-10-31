@@ -11,6 +11,8 @@ interface Props {
   lang: Lang
   exampleNames: string[]
   onSignup: () => void
+  // الخطط ودعوة التسجيل للزائر فقط؛ المسجّل لا يحتاجها
+  showSignup: boolean
 }
 
 // نصوص أقسام الصفحة بالعربية والإنجليزية
@@ -40,10 +42,17 @@ const copy = {
     ],
     plansTitle: 'حساب مجاني، فحص بلا حدود',
     plansSub: 'فحص الكود بالذكاء الاصطناعي متاح بعد تسجيل الدخول فقط. أنشئ حسابك بالبريد مجاناً.',
-    plans: [
-      { name: 'زائر', price: 'مجاني', note: 'بدون فحص بالذكاء الاصطناعي', features: ['المحرر كاملاً مع الأمثلة', `كل اللغات الـ${LANGUAGES.length}`, 'ملفات متعددة، واستيراد وحفظ', 'الواجهة بالعربية والإنجليزية'], cta: 'تصفّح المحرر', badge: '' },
-      { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['فحص بالذكاء الاصطناعي بلا حدود', 'الشرح بالعربية والإنجليزية', 'ملفاتك محفوظة في حسابك', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
-    ],
+    plan: { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['فحص بالذكاء الاصطناعي بلا حدود', 'الشرح بالعربية والإنجليزية', 'ملفاتك محفوظة في حسابك', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
+    // خطوات البدء بجانب بطاقة الحساب: ما يفعله الزائر ليصل للفحص
+    signupSteps: {
+      name: 'ابدأ في دقيقة',
+      steps: [
+        ['أنشئ حساباً بالبريد', 'الاسم والبريد وكلمة المرور فقط.'],
+        ['أكّد بريدك', 'رابط واحد يصلك فوراً.'],
+        ['افحص كودك', 'بلا حدود، وملفاتك محفوظة في حسابك.'],
+      ],
+      cta: 'أنشئ حساباً الآن',
+    },
     ctaTitle: 'سجّل الدخول وافحص كودك.',
     ctaButton: 'أنشئ حساباً مجانياً',
     about: 'محرر أكواد يكتشف الأخطاء ويشرح حلها بالعربية والإنجليزية باستخدام الذكاء الاصطناعي.',
@@ -79,10 +88,16 @@ const copy = {
     ],
     plansTitle: 'Free account. Unlimited reviews.',
     plansSub: 'AI code reviews are for signed-in users only. Create your account with your email, free.',
-    plans: [
-      { name: 'Guest', price: 'Free', note: 'No AI reviews', features: ['The full editor & examples', `All ${LANGUAGES.length} languages`, 'Multiple files, import & save', 'Arabic & English interface'], cta: 'Browse the editor', badge: '' },
-      { name: 'Account', price: 'Free', note: 'With your email', features: ['Unlimited AI reviews', 'Arabic & English explanations', 'Files saved to your account', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
-    ],
+    plan: { name: 'Account', price: 'Free', note: 'With your email', features: ['Unlimited AI reviews', 'Arabic & English explanations', 'Files saved to your account', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
+    signupSteps: {
+      name: 'Get started in a minute',
+      steps: [
+        ['Create an account', 'Just your name, email and a password.'],
+        ['Confirm your email', 'One link, sent right away.'],
+        ['Review your code', 'No limits, and your files are saved to your account.'],
+      ],
+      cta: 'Create account now',
+    },
     ctaTitle: 'Log in and review your code.',
     ctaButton: 'Create a free account',
     about: 'A code editor that finds bugs and explains the fix in Arabic and English using AI.',
@@ -101,7 +116,7 @@ const STEP_STYLES = ['bg-surface', 'bg-surface-2', 'bg-accent-soft', 'bg-accent 
 // ضغطة الأزرار: انكماش خفيف مع انتقال اللون
 const press = 'transition-[color,background-color,transform] duration-150 active:scale-[0.96]'
 
-export default function LandingSections({ lang, exampleNames, onSignup }: Props) {
+export default function LandingSections({ lang, exampleNames, onSignup, showSignup }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const lenis = useLenis()
   const c = copy[lang]
@@ -139,7 +154,7 @@ export default function LandingSections({ lang, exampleNames, onSignup }: Props)
         })
       })
     },
-    { scope: rootRef }
+    { scope: rootRef, dependencies: [showSignup], revertOnUpdate: true }
   )
 
   return (
@@ -234,58 +249,80 @@ export default function LandingSections({ lang, exampleNames, onSignup }: Props)
         </ol>
       </section>
 
-      {/* الخطط: زائر بلا فحص، أو حساب */}
-      <section id="plans" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
-        <SplitText
-          text={c.plansTitle}
-          tag="h2"
-          splitType="words"
-          className={`w-full text-4xl ${lead} md:text-[64px] ${tight}`}
-        />
-        <p data-reveal className="mx-auto mt-4 max-w-md text-center text-ink-2">
-          {c.plansSub}
-        </p>
-        <div className="mt-10 grid gap-3 md:grid-cols-2">
-          {c.plans.map((plan, i) => (
-            <article key={plan.name} data-card className="flex flex-col rounded-2xl bg-surface p-6">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-ink-2">{plan.name}</p>
-                {plan.badge && <p className="text-sm text-accent">{plan.badge}</p>}
-              </div>
-              {/* line-height 1 من text-5xl يقص ذيل الجيم والياء في "مجاني" فيدخل في السطر الذي تحته */}
-              <p className={`mt-4 text-5xl ${isEn ? tight : 'leading-[1.4]'}`}>{plan.price}</p>
-              <p className="mt-3 text-sm text-ink-2">{plan.note}</p>
-              <ul className="mt-6 flex-1 space-y-2 text-sm">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2">
-                    <CheckIcon className="size-4 shrink-0 text-accent" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <button
-                onClick={i === 0 ? () => go('#top') : onSignup}
-                className={`mt-8 h-10 rounded-lg text-sm font-medium ${press} ${plan.badge ? 'bg-accent text-on-accent hover:bg-accent-hover' : 'bg-surface-2 text-ink hover:bg-line'}`}
-              >
-                {plan.cta}
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
+      {showSignup && (
+        <>
+          {/* الخطط: الحساب المجاني، وبجانبه خطوات البدء */}
+          <section id="plans" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+            <SplitText
+              text={c.plansTitle}
+              tag="h2"
+              splitType="words"
+              className={`w-full text-4xl ${lead} md:text-[64px] ${tight}`}
+            />
+            <p data-reveal className="mx-auto mt-4 max-w-md text-center text-ink-2">
+              {c.plansSub}
+            </p>
+            <div className="mt-10 grid gap-3 md:grid-cols-2">
+              <article data-card className="flex flex-col rounded-2xl bg-surface p-6">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-ink-2">{c.plan.name}</p>
+                  <p className="text-sm text-accent">{c.plan.badge}</p>
+                </div>
+                {/* line-height 1 من text-5xl يقص ذيل الجيم والياء في "مجاني" فيدخل في السطر الذي تحته */}
+                <p className={`mt-4 text-5xl ${isEn ? tight : 'leading-[1.4]'}`}>{c.plan.price}</p>
+                <p className="mt-3 text-sm text-ink-2">{c.plan.note}</p>
+                <ul className="mt-6 flex-1 space-y-2 text-sm">
+                  {c.plan.features.map((f) => (
+                    <li key={f} className="flex items-center gap-2">
+                      <CheckIcon className="size-4 shrink-0 text-accent" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={onSignup}
+                  className={`mt-8 h-10 rounded-lg bg-accent text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
+                >
+                  {c.plan.cta}
+                </button>
+              </article>
 
-      {/* دعوة للبدء */}
-      <section className="px-4 py-28 text-center">
-        <SplitText text={c.ctaTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-[56px] ${tight}`} />
-        <div data-reveal className="mt-8">
-          <button
-            onClick={onSignup}
-            className={`inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
-          >
-            {c.ctaButton} <ArrowIcon />
-          </button>
-        </div>
-      </section>
+              <article data-card className="flex flex-col rounded-2xl bg-surface p-6">
+                <p className="text-sm text-ink-2">{c.signupSteps.name}</p>
+                <ol className="mt-6 flex-1 space-y-6">
+                  {c.signupSteps.steps.map(([title, body], i) => (
+                    <li key={title} className="flex gap-4">
+                      <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-lg font-medium text-accent">
+                        {i + 1}
+                      </span>
+                      <div>
+                        <p className="text-lg font-medium">{title}</p>
+                        <p className="mt-1 text-sm text-ink-2">{body}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <button onClick={onSignup} className={`mt-8 h-10 rounded-lg bg-surface-2 text-sm font-medium text-ink hover:bg-line ${press}`}>
+                  {c.signupSteps.cta}
+                </button>
+              </article>
+            </div>
+          </section>
+
+          {/* دعوة للبدء */}
+          <section className="px-4 py-28 text-center">
+            <SplitText text={c.ctaTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-[56px] ${tight}`} />
+            <div data-reveal className="mt-8">
+              <button
+                onClick={onSignup}
+                className={`inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
+              >
+                {c.ctaButton} <ArrowIcon />
+              </button>
+            </div>
+          </section>
+        </>
+      )}
 
       <footer className="bg-page-2">
         <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-16 md:grid-cols-[2fr_1fr] md:px-8">
@@ -301,7 +338,7 @@ export default function LandingSections({ lang, exampleNames, onSignup }: Props)
           <nav aria-label={c.footerTitle}>
             <h2 className="text-sm font-semibold">{c.footerTitle}</h2>
             <ul className="mt-4 space-y-2 text-sm text-ink-2">
-              {c.footerLinks.map(([label, target]) => (
+              {c.footerLinks.filter(([, target]) => showSignup || target !== '#plans').map(([label, target]) => (
                 <li key={target}>
                   <button onClick={() => go(target)} className="hover:text-ink">
                     {label}
