@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
 import Editor, { type Monaco } from '@monaco-editor/react'
 import { useLenis } from 'lenis/react'
-import { LockIcon } from '@/components/Icons'
+import { GitHubIcon, GoogleIcon, LockIcon } from '@/components/Icons'
 import LandingSections from '@/components/LandingSections'
 import SplitText from '@/components/SplitText'
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap'
@@ -176,6 +176,7 @@ const t = {
       featureNotice: 'هذه الميزة متاحة بحساب مجاني. أنشئ حساباً أو سجّل الدخول لاستخدامها.',
       name: 'الاسم',
       email: 'البريد الإلكتروني',
+      emailOrUsername: 'البريد الإلكتروني أو اسم المستخدم',
       password: 'كلمة المرور',
       signin: 'دخول',
       signup: 'إنشاء الحساب',
@@ -192,6 +193,9 @@ const t = {
       savePassword: 'حفظ كلمة المرور',
       checkEmail: 'أرسلنا رسالة تأكيد إلى بريدك. افتح الرابط فيها لتفعيل حسابك.',
       backToSignin: 'العودة لتسجيل الدخول',
+      // ⁦…⁩ يعزل اسم المزوّد اللاتيني داخل الجملة العربية
+      continueWith: (provider: string) => `المتابعة عبر ⁦${provider}⁩`,
+      or: 'أو',
     },
     errors: {
       request: 'تعذر الحصول على نتيجة.',
@@ -249,6 +253,7 @@ const t = {
       featureNotice: 'This feature comes with a free account. Create one or log in to use it.',
       name: 'Name',
       email: 'Email',
+      emailOrUsername: 'Email or username',
       password: 'Password',
       signin: 'Log in',
       signup: 'Create account',
@@ -265,6 +270,8 @@ const t = {
       savePassword: 'Save password',
       checkEmail: "We've sent you a confirmation email. Open the link in it to activate your account.",
       backToSignin: 'Back to log in',
+      continueWith: (provider: string) => `Continue with ${provider}`,
+      or: 'or',
     },
     errors: {
       request: 'Could not get a result.',
@@ -433,6 +440,16 @@ function App() {
     if (authMode === 'reset') return setAuthAlert({ text: tr.auth.resetSent, error: false })
     if (authMode === 'newPassword') notify(ac.toasts.passwordUpdated, 'success')
     closeAuth()
+  }
+
+  // الدخول عبر Google أو GitHub: عند النجاح يغادر المتصفح للمزوّد، فلا يبقى إلا عرض الخطأ إن وُجد
+  const signInWithProvider = async (provider: 'google' | 'github') => {
+    setAuthBusy(true)
+    setAuthAlert(null)
+    const { error } = await auth.signInWithProvider(provider)
+    if (!error) return
+    setAuthBusy(false)
+    setAuthAlert({ text: error.message, error: true })
   }
 
   // رابط الاستعادة من البريد يسجّل الدخول مؤقتاً، فنطلب كلمة المرور الجديدة فوراً
@@ -1211,6 +1228,29 @@ function App() {
                 {tr.auth.featureNotice}
               </p>
             )}
+            {(authMode === 'signin' || authMode === 'signup') && (
+              <>
+                <div className="grid gap-2">
+                  {(['google', 'github'] as const).map((provider) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      onClick={() => signInWithProvider(provider)}
+                      disabled={authBusy}
+                      className={`${outlineButton} flex h-10 w-full items-center justify-center gap-2`}
+                    >
+                      {provider === 'google' ? <GoogleIcon /> : <GitHubIcon />}
+                      {tr.auth.continueWith(provider === 'google' ? 'Google' : 'GitHub')}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-ink-2">
+                  <span className="h-px flex-1 bg-line" />
+                  {tr.auth.or}
+                  <span className="h-px flex-1 bg-line" />
+                </div>
+              </>
+            )}
             {authMode === 'signup' && (
               <label className="block text-sm">
                 {tr.auth.name}
@@ -1219,8 +1259,18 @@ function App() {
             )}
             {authMode !== 'newPassword' && (
               <label className="block text-sm">
-                {tr.auth.email}
-                <input name="email" type="email" required autoComplete="email" dir="ltr" className={input} />
+                {authMode === 'signin' ? tr.auth.emailOrUsername : tr.auth.email}
+                {/* الدخول يقبل اسم المستخدم أيضاً، فالحقل نصي فيه؛ الإنشاء والاستعادة يحتاجان بريداً */}
+                <input
+                  key={authMode === 'signin' ? 'identifier' : 'email'}
+                  name="email"
+                  type={authMode === 'signin' ? 'text' : 'email'}
+                  required
+                  autoComplete={authMode === 'signin' ? 'username' : 'email'}
+                  spellCheck={false}
+                  dir="ltr"
+                  className={input}
+                />
               </label>
             )}
             {authMode !== 'reset' && (

@@ -19,7 +19,7 @@ interface Props {
   copy: AccountCopy
   lang: 'ar' | 'en'
   onLang: (lang: 'ar' | 'en') => void
-  onSave: (next: Profile) => Promise<Profile | null>
+  onSave: (next: Profile) => Promise<Profile | 'usernameTaken' | null>
   onDelete: () => void
   editor: EditorSettings
   onEditor: (next: EditorSettings) => Promise<boolean>

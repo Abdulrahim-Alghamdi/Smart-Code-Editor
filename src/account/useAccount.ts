@@ -52,14 +52,15 @@ export function useAccount() {
   // البريد يُقرأ من الجلسة كل مرة حتى يظهر الجديد فور تأكيد تغييره
   const account = current?.account && user?.email ? { ...current.account, email: user.email } : null
 
-  // يعيد null إذا رفض الخادم الحفظ حتى لا تظهر رسالة نجاح والتغيير لم يُحفظ
-  const save = async (next: Profile): Promise<Profile | null> => {
+  // يعيد null إذا رفض الخادم الحفظ حتى لا تظهر رسالة نجاح والتغيير لم يُحفظ، و usernameTaken إذا كان الاسم لغيره
+  const save = async (next: Profile): Promise<Profile | 'usernameTaken' | null> => {
     if (!user || !current) return null
     const clean = { ...next, name: next.name.trim(), email: next.email.trim(), bio: next.bio.trim() }
     const { error } = await supabase
       .from('profiles')
       .upsert({ id: user.id, name: clean.name, username: clean.username, bio: clean.bio, avatar: clean.avatar })
-    if (error) return null
+    // 23505 = unique_violation على profiles_username_key
+    if (error) return error.code === '23505' ? 'usernameTaken' : null
     setRow({ ...current, account: clean })
     // تغيير البريد لا يُطبَّق حتى يؤكده المستخدم من الرسالة، فيبقى الحالي معروضاً حتى ذلك
     if (clean.email.toLowerCase() !== user.email?.toLowerCase()) {

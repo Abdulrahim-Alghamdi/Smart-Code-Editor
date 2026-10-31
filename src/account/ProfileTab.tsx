@@ -20,7 +20,7 @@ const shrinkImage = async (file: File): Promise<string> => {
 interface Props {
   account: Profile
   copy: AccountCopy
-  onSave: (next: Profile) => Promise<Profile | null>
+  onSave: (next: Profile) => Promise<Profile | 'usernameTaken' | null>
   notify: (text: string, kind: 'success' | 'error') => void
 }
 
@@ -72,6 +72,10 @@ export function ProfileTab({ account, copy, onSave, notify }: Props) {
     const saved = await onSave(draft)
     setSaving(false)
     if (!saved) return notify(copy.toasts.saveFailed, 'error')
+    if (saved === 'usernameTaken') {
+      formRef.current?.querySelector<HTMLElement>('[name="username"]')?.focus()
+      return notify(copy.toasts.usernameTaken, 'error')
+    }
     setDraft(saved)
     setTouched({})
     // البريد الجديد ينتظر التأكيد من الرسالة، فالمحفوظ يرجع بالبريد الحالي

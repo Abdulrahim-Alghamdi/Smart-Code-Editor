@@ -2,6 +2,7 @@
 // Only signed-in users may call it: the platform's verify_jwt check rejects a missing or forged JWT,
 // and getUser below rejects the public anon key, which is also a valid JWT.
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { corsHeaders, forbidden } from '../_shared/cors.ts'
 
 // Tried in order: if one is busy or times out, the next one gets the request
 const MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest']
@@ -9,21 +10,6 @@ const MODEL_TIMEOUT_MS = 20_000
 // Caps what one request can send to Gemini on your bill
 const MAX_FILES = 50
 const MAX_TOTAL_CHARS = 300_000
-
-// Browser origins allowed to call this function; `*` matches one DNS label part (letters, digits, dashes).
-// The ALLOWED_ORIGINS secret (comma-separated, same syntax) replaces this list without a code change.
-const DEFAULT_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://smart-code-editor.vercel.app',
-  'https://smart-code-editor-*.vercel.app',
-]
-const ORIGIN_PATTERNS = (Deno.env.get('ALLOWED_ORIGINS')?.split(',') ?? DEFAULT_ORIGINS)
-  .map((o) => o.trim())
-  .filter(Boolean)
-  .map((o) => new RegExp(`^${o.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-z0-9-]+')}$`, 'i'))
-
-const isAllowedOrigin = (origin: string) => ORIGIN_PATTERNS.some((p) => p.test(origin))
 
 const TEXT_SCHEMA = {
   type: 'OBJECT',
@@ -104,17 +90,9 @@ ${project}`
 }
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get('Origin')
-  // A browser on any other site is refused before auth or Gemini run. Non-browser callers send no Origin;
-  // they are not a CORS question and still need a signed-in user's JWT below.
-  if (origin && !isAllowedOrigin(origin)) return new Response('Origin not allowed', { status: 403, headers: { Vary: 'Origin' } })
-
-  const cors: Record<string, string> = {
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    Vary: 'Origin',
-    ...(origin && { 'Access-Control-Allow-Origin': origin }),
-  }
+  // A browser on any other site is refused before auth or Gemini run
+  const cors = corsHeaders(req)
+  if (!cors) return forbidden()
   // error keys match the client's message keys: request, badResponse, network
   const reply = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
