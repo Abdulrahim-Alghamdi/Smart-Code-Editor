@@ -516,9 +516,12 @@ function App() {
       setVersions([])
     })
 
-  // المحتوى الحالي يُثبَّت نسخةً قبل الاستعادة، فيمكن الرجوع إليه
+  // المحتوى الحالي يُثبَّت نسخةً قبل الاستعادة فيمكن الرجوع إليه، ثم تنتقل النسخة المستعادة للأعلى؛
+  // فيجدها الحفظ التلقائي بعد الاستعادة أحدث نسخة ولا يكررها
   const restoreVersion = async (snapshot: Snapshot) => {
-    await localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content: active.content }, true).catch(console.error)
+    const file = { id: active.id, name: active.name, language: active.language }
+    await localDb.addSnapshot({ ...file, content: active.content }, true).catch(console.error)
+    await localDb.addSnapshot({ ...file, content: snapshot.content }, true).catch(console.error)
     setCode(snapshot.content)
     setVersions(null)
     notify(wc.toasts.versionRestored, 'success')

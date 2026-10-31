@@ -45,30 +45,43 @@ const committed = (tx: IDBTransaction) =>
 const store = async (name: 'snapshots' | 'drafts', mode: IDBTransactionMode) => (await open()).transaction(name, mode).objectStore(name)
 
 export const localDb = {
-  // يحفظ محتوى الملف نسخةً جديدة، أو يحدّث آخر نسخة إذا بدأت قبل أقل من دقيقة. keep تثبّت النسخة قبل الاستعادة
+  // يحفظ محتوى الملف نسخةً جديدة، أو يحدّث آخر نسخة إذا بدأت قبل أقل من دقيقة. keep تثبّت النسخة قبل الاستعادة.
+  // لكل محتوى نسخة واحدة: محتوى موجود من قبل (استعادة أو تراجع إليه) تنتقل نسخته للأعلى بدل تكرارها
   async addSnapshot(file: CloudFile, keep = false) {
     const snapshots = await store('snapshots', 'readwrite')
     // shortcut: نسخ الملفات المغلقة تبقى حتى يُمسح تخزين المتصفح؛ إن كبرت أضف حداً كلياً
-    const keys = await done(snapshots.index('fileId').getAllKeys(file.id))
-    const lastKey = keys.at(-1)
-    const last = lastKey === undefined ? undefined : ((await done(snapshots.get(lastKey))) as Snapshot | undefined)
+    const all = (await done(snapshots.index('fileId').getAll(file.id))) as Snapshot[]
+    const last = all.at(-1)
+    const same = all.find((s) => s.content === file.content)
     const now = Date.now()
+    const entry = { fileId: file.id, name: file.name, language: file.language, content: file.content, createdAt: now, savedAt: now, kept: keep }
 
-    if (last?.content === file.content) {
+    if (same === last && last) {
       if (keep && !last.kept) snapshots.put({ ...last, kept: true })
+    } else if (same) {
+      // مثبّتة، حتى لا تُدمج فيها تعديلات الدقيقة التالية فتضيع النسخة المستعادة
+      snapshots.delete(same.id)
+      snapshots.add({ ...entry, kept: true })
     } else if (last && !last.kept && !keep && now - last.createdAt < MERGE_WINDOW_MS) {
       snapshots.put({ ...last, name: file.name, language: file.language, content: file.content, savedAt: now })
     } else {
-      snapshots.add({ fileId: file.id, name: file.name, language: file.language, content: file.content, createdAt: now, savedAt: now, kept: keep })
-      for (const key of keys.slice(0, Math.max(0, keys.length + 1 - SNAPSHOT_LIMIT))) snapshots.delete(key)
+      snapshots.add(entry)
+      for (const old of all.slice(0, Math.max(0, all.length + 1 - SNAPSHOT_LIMIT))) snapshots.delete(old.id)
     }
     return committed(snapshots.transaction)
   },
 
-  // الأحدث أولاً
+  // الأحدث أولاً، بلا تكرار للمحتوى نفسه (نسخ قديمة حُفظت قبل منع التكرار)
   async listSnapshots(fileId: string): Promise<Snapshot[]> {
     const snapshots = await store('snapshots', 'readonly')
-    return ((await done(snapshots.index('fileId').getAll(fileId))) as Snapshot[]).reverse()
+    const seen = new Set<string>()
+    return ((await done(snapshots.index('fileId').getAll(fileId))) as Snapshot[])
+      .reverse()
+      .filter((s) => {
+        if (seen.has(s.content)) return false
+        seen.add(s.content)
+        return true
+      })
   },
 
   // تبويبات المسجّل كاملة كما كانت عند فشل آخر مزامنة؛ null إذا وصل كل شيء للحساب

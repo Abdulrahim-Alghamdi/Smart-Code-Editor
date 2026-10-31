@@ -63,6 +63,7 @@ export function VersionsDialog({ versions, fileName, current, onClose, onRestore
   const [expanded, setExpanded] = useState<{ list: Snapshot[]; id: number } | null>(null)
   const expandedId = expanded?.list === versions ? expanded.id : null
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  const currentId = versions?.find((v) => v.content === current)?.id
 
   useEffect(() => {
     const dialog = ref.current
@@ -104,7 +105,8 @@ export function VersionsDialog({ versions, fileName, current, onClose, onRestore
           <ul className="mt-3 max-h-[65svh] overflow-y-auto px-2 sm:px-3">
             {versions.map((v) => {
               const isOpen = v.id === expandedId
-              const isCurrent = v.content === current
+              // الشارة لأحدث نسخة تطابق المحرر فقط
+              const isCurrent = v.id === currentId
               const lines = copy.lines(v.content.split('\n').length)
               return (
                 <li key={v.id} className={`rounded-lg ${isOpen ? 'bg-surface-2' : ''}`}>
