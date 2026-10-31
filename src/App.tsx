@@ -677,6 +677,8 @@ function App() {
   const selectLanguage = (id: string, exampleIndex?: number) => {
     const next = LANGUAGES.find((l) => l.id === id)
     if (!next) return
+    // مخرجات اللغة السابقة لا تخص الكود بعد التبديل، فتُغلق
+    if (next.id !== language) setOutput(null)
     const taken = files.filter((f) => f.id !== active.id).map((f) => f.name)
     updateFile(active.id, {
       language: next.id,
@@ -1103,7 +1105,8 @@ function App() {
                   />
                 </div>
 
-                {output?.fileId === active.id && (
+                {/* المخرجات للملف ولغته؛ تغيير اللغة بإعادة التسمية (main.js ← main.py) يخفيها أيضاً */}
+                {output?.fileId === active.id && output.language === language && (
                   <OutputPanel
                     key={output.run}
                     name={output.name}
