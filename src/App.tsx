@@ -117,6 +117,8 @@ const HISTORY_DELAY_MS = 1500
 const SYNC_DELAY_MS = 1000
 
 const parseLang = (v: unknown): Lang | null => (v === 'ar' || v === 'en' ? v : null)
+// لغة الزيارة الأولى من لغة الجهاز (المتصفح): عربي لأي لهجة عربية، وإلا إنجليزي. اختيار المستخدم المحفوظ يغلبها
+const DEVICE_LANG: Lang = (navigator.languages?.[0] ?? navigator.language ?? '').toLowerCase().startsWith('ar') ? 'ar' : 'en'
 // أمثلة اللغات الجاهزة ليست عمل المستخدم، فلا تُسجَّل في الملفات الأخيرة
 const isExample = (content: string) => LANGUAGES.some((l) => l.examples.includes(content))
 
@@ -343,7 +345,7 @@ function App() {
   const lenis = useLenis()
 
   // حالات الواجهة والمحرر والذكاء الاصطناعي
-  const [lang, setLang] = useStored<Lang>(KEYS.lang, 'ar', parseLang)
+  const [lang, setLang] = useStored<Lang>(KEYS.lang, DEVICE_LANG, parseLang)
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // لقطة الكود وقت الضغط على "المخرجات"؛ run يتغير مع كل تشغيل فيُعاد تحميل الإطار وتُمسح المخرجات السابقة
@@ -487,11 +489,20 @@ function App() {
 
   const wc = workspaceCopy[lang]
 
-  // اللغة وإعدادات المحرر المحفوظة في حساب المسجّل تتبعه بين الأجهزة، فتُطبَّق فور تحميل ملفه
+  // آخر قيمة للغة ولدالة الحفظ، لقراءتهما عند تحميل الحساب دون إعادة الحفظ مع كل تبديل
+  const langSync = useRef({ lang, saveSettings })
   useEffect(() => {
-    if (accountSettings?.lang) setLang(accountSettings.lang)
-    if (accountSettings?.editor) setEditorSettings(accountSettings.editor)
-  }, [accountSettings, setLang, setEditorSettings])
+    langSync.current = { lang, saveSettings }
+  })
+
+  // عند تحميل حساب المسجّل: إعدادات المحرر المحفوظة فيه تُطبَّق، أما اللغة فتبقى كما يراها على الشاشة (لا تقلب الواجهة عند الدخول)
+  // وتُحفظ في حسابه إن اختلفت، فيبقى الحساب على آخر لغة اختارها
+  useEffect(() => {
+    if (!accountSettings) return
+    if (accountSettings.editor) setEditorSettings(accountSettings.editor)
+    const { lang: shown, saveSettings: saveToAccount } = langSync.current
+    if (accountSettings.lang !== shown) void saveToAccount({ lang: shown })
+  }, [accountSettings, setEditorSettings])
 
   // تُحفظ في المتصفح دائماً، وفي جدول profiles أيضاً للمسجّل
   const saveLang = async (next: Lang) => (await setLang(next)) && (await saveSettings({ lang: next }))
