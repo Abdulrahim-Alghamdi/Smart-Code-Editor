@@ -11,8 +11,6 @@ import { KEYS } from '@/services/storage'
 import { useStored } from '@/services/useStored'
 import { workspaceCopy } from '@/workspace/copy'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
-import { parseHistory, recordEntry, type HistoryEntry } from '@/workspace/history'
-import { RecentDialog } from '@/workspace/RecentDialog'
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
 import { VersionsDialog } from '@/workspace/VersionsDialog'
@@ -109,7 +107,7 @@ const FIRST_FILE: ProjectFile = {
 // رقم متزايد لكل رسالة، فتظهر الرسالة نفسها من جديد إذا تكررت
 let toastCount = 0
 
-// اللقطة تُحفظ بعد توقف الكتابة بهذه المدة، لا مع كل حرف
+// نسخة السجل تُحفظ بعد توقف الكتابة بهذه المدة، لا مع كل حرف
 const HISTORY_DELAY_MS = 1500
 // الملفات تُرفع لحساب المسجّل بعد توقف الكتابة بهذه المدة
 const SYNC_DELAY_MS = 1000
@@ -343,8 +341,6 @@ function App() {
   // حالات الواجهة والمحرر والذكاء الاصطناعي
   const [lang, setLang] = useStored<Lang>(KEYS.lang, 'ar', parseLang)
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
-  const [history, setHistory, historyLoaded] = useStored<HistoryEntry[]>(KEYS.history, [], parseHistory)
-  const [recentOpen, setRecentOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
@@ -505,18 +501,6 @@ function App() {
     else notify(accountCopy[next].toasts.editorSaveFailed, 'error')
   }
 
-  // الملفات الأخيرة: لقطة من الملف النشط بعد توقف الكتابة
-  useEffect(() => {
-    // قبل تحميل السجل المحفوظ قد تستبدل الكتابة الأولى السجل كله
-    if (!historyLoaded || !active.content.trim() || isExample(active.content)) return
-    const timer = setTimeout(() => {
-      const next = recordEntry(history, { id: active.id, name: active.name, language: active.language, content: active.content, updatedAt: Date.now() })
-      // shortcut: فشل حفظ السجل في الخلفية لا يُعرض حتى لا تتكرر الرسالة كل ثانيتين؛ يظهر عند المسح أو الإزالة
-      if (next !== history) setHistory(next)
-    }, HISTORY_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [historyLoaded, active.id, active.name, active.language, active.content, history, setHistory])
-
   // سجل النسخ في IndexedDB: نسخة لكل دقيقة تعديل من الملف النشط، بعد توقف الكتابة
   useEffect(() => {
     if (!active.content.trim() || isExample(active.content)) return
@@ -643,33 +627,6 @@ function App() {
     }
     wasSignedIn.current = signedIn
   }, [signedIn])
-
-  const openRecent = (entry: HistoryEntry) => {
-    const open = files.find((f) => f.id === entry.id)
-    if (open) {
-      setActiveId(open.id)
-      setRecentOpen(false)
-      return
-    }
-    // فتح ملف من السجل يضيف تبويباً
-    setRecentOpen(false)
-    const name = uniqueName(entry.name, files.map((f) => f.name))
-    // معرّف جديد: السجل مشترك بين حسابات هذا المتصفح، ومعرّف ملف حساب آخر سيرفضه الخادم عند المزامنة
-    const id = newId()
-    setFiles((all) => [...all, { id, name, language: entry.language, content: entry.content }])
-    setActiveId(id)
-    notify(wc.toasts.opened(name), 'success')
-  }
-
-  const removeRecent = async (id: string) => {
-    if (await setHistory(history.filter((e) => e.id !== id))) notify(wc.toasts.removed, 'success')
-    else notify(wc.toasts.historyFailed, 'error')
-  }
-
-  const clearRecent = async () => {
-    if (await setHistory([])) notify(wc.toasts.cleared, 'success')
-    else notify(wc.toasts.historyFailed, 'error')
-  }
 
   const copy = async (text: string, what: 'code' | 'explanation') => {
     try {
@@ -982,16 +939,9 @@ function App() {
                     </svg>
                     {tr.files.renameAction}
                   </button>
-                  <button onClick={() => setRecentOpen(true)} className={labelButton}>
-                    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" />
-                    </svg>
-                    {wc.recent}
-                    {history.length > 0 && <span className="tabular-nums text-ink-2/70">{history.length}</span>}
-                  </button>
                   <button onClick={openVersions} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" />
+                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" />
                     </svg>
                     {wc.versions}
                   </button>
@@ -1498,16 +1448,6 @@ function App() {
         onRestore={restoreVersion}
         lang={lang}
         copy={wc}
-      />
-      <RecentDialog
-        open={recentOpen}
-        onClose={() => setRecentOpen(false)}
-        entries={history}
-        lang={lang}
-        copy={wc}
-        onOpen={openRecent}
-        onRemove={removeRecent}
-        onClear={clearRecent}
       />
       <Toast message={toast} onDone={clearToast} />
     </div>

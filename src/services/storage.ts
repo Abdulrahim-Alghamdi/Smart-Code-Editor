@@ -11,7 +11,6 @@ export interface StorageAdapter {
 export const KEYS = {
   lang: 'sce.lang',
   editor: 'sce.editor',
-  history: 'sce.history',
 } as const
 
 export const memoryAdapter = (): StorageAdapter => {
