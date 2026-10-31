@@ -25,7 +25,8 @@ export const authActions = {
     supabase.auth.signInWithOAuth({ provider, options: { redirectTo: redirectTo() } }),
   resetPassword: (email: string) => supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectTo() }),
   updatePassword: (password: string) => supabase.auth.updateUser({ password }),
-  signOut: () => supabase.auth.signOut(),
+  // هذا الجهاز فقط؛ الافتراضي (global) يلغي جلسات الأجهزة الأخرى فيرفض الخادم طلباتها وهي تبدو مسجّلة
+  signOut: () => supabase.auth.signOut({ scope: 'local' }),
 }
 
 export interface Auth extends Readonly<typeof authActions> {

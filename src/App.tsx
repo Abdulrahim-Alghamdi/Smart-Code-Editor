@@ -178,6 +178,7 @@ const t = {
       signinTitle: 'تسجيل الدخول',
       signupTitle: 'إنشاء حساب',
       featureNotice: 'هذه الميزة متاحة بحساب مجاني. أنشئ حساباً أو سجّل الدخول لاستخدامها.',
+      sessionNotice: 'انتهت جلستك (ربما سجّلت الخروج من جهاز آخر). سجّل الدخول من جديد ثم أعد الفحص.',
       name: 'الاسم',
       email: 'البريد الإلكتروني',
       emailOrUsername: 'البريد الإلكتروني أو اسم المستخدم',
@@ -255,6 +256,7 @@ const t = {
       signinTitle: 'Log in',
       signupTitle: 'Create account',
       featureNotice: 'This feature comes with a free account. Create one or log in to use it.',
+      sessionNotice: 'Your session has ended (maybe you signed out on another device). Log in again, then run the review.',
       name: 'Name',
       email: 'Email',
       emailOrUsername: 'Email or username',
@@ -364,7 +366,7 @@ function App() {
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [authMode, setAuthMode] = useState<AuthMode>('signin')
   // سبب فتح نافذة الدخول (ميزة للمسجّلين)، ويظهر كتنبيه فوق النموذج
-  const [authNotice, setAuthNotice] = useState<'feature' | null>(null)
+  const [authNotice, setAuthNotice] = useState<'feature' | 'session' | null>(null)
   // نتيجة آخر إرسال للنموذج: خطأ من Supabase أو تعليمات مثل "افتح بريدك"
   const [authAlert, setAuthAlert] = useState<{ text: string; error: boolean } | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
@@ -403,9 +405,9 @@ function App() {
     { dependencies: [review, error, panelOpen] }
   )
 
-  const openAuth = (mode: AuthMode, notice: 'feature' | null = null) => {
-    // المسجّل لا يحتاج نافذة الدخول؛ أزرار "أنشئ حساباً" تفتح له إدارة الحساب
-    if (user) return setAccountTab('profile')
+  const openAuth = (mode: AuthMode, notice: 'feature' | 'session' | null = null) => {
+    // المسجّل لا يحتاج نافذة الدخول؛ أزرار "أنشئ حساباً" تفتح له إدارة الحساب. 'session' تأتي بعد خروج لم يصل بعد لحالة user
+    if (user && notice !== 'session') return setAccountTab('profile')
     setAuthMode(mode)
     setAuthNotice(notice)
     setAuthAlert(null)
@@ -817,11 +819,21 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const { data, error } = await supabase.functions.invoke<{ text: string; model: string }>('gemini', {
-        body: {
-          files: files.map((f) => ({ name: f.name, language: LANGUAGES.find((l) => l.id === f.language)?.label ?? f.language, content: f.content })),
-        },
-      })
+      const body = {
+        files: files.map((f) => ({ name: f.name, language: LANGUAGES.find((l) => l.id === f.language)?.label ?? f.language, content: f.content })),
+      }
+      const invoke = () => supabase.functions.invoke<{ text: string; model: string }>('gemini', { body })
+      let { data, error } = await invoke()
+      // 401: الرمز انتهى أو أُلغيت جلسته على الخادم. نجدده ونعيد مرة، وإن تعذّر التجديد فالجلسة انتهت فعلاً: خروج ثم دخول من جديد
+      if (error instanceof FunctionsHttpError && error.context.status === 401) {
+        const { error: refreshError } = await supabase.auth.refreshSession()
+        if (refreshError) {
+          await auth.signOut()
+          openAuth('signin', 'session')
+          return
+        }
+        ;({ data, error } = await invoke())
+      }
       if (error) {
         // ردّ HTTP من غير دالتنا (مثل 404 دالة غير منشورة) يُعرض برقمه ورسالته؛ بلا ردّ إطلاقاً يعني انقطاع الاتصال
         if (!(error instanceof FunctionsHttpError)) return setError({ key: 'network' })
@@ -831,7 +843,7 @@ function App() {
       }
       // الرد قادم من الذكاء الاصطناعي عبر الخادم، فيُتحقق من شكله هنا أيضاً
       const parsed = data && parseReview(data.text)
-      if (!parsed) return setError({ key: 'badResponse' })
+      if (!data || !parsed) return setError({ key: 'badResponse' })
       setReview(parsed)
       setLastModel(data.model)
       setTab('bugs')
@@ -1363,7 +1375,7 @@ function App() {
             </div>
             {authNotice && (
               <p className="rounded-lg border border-accent/40 bg-accent-soft/50 p-3 text-sm">
-                {tr.auth.featureNotice}
+                {authNotice === 'session' ? tr.auth.sessionNotice : tr.auth.featureNotice}
               </p>
             )}
             {(authMode === 'signin' || authMode === 'signup') && (
