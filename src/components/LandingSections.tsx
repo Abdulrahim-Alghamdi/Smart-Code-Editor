@@ -11,6 +11,7 @@ interface Props {
   lang: Lang
   exampleNames: string[]
   onSignup: () => void
+  onSignin: () => void
   // الخطط ودعوة التسجيل للزائر فقط؛ المسجّل لا يحتاجها
   showSignup: boolean
 }
@@ -51,10 +52,9 @@ const copy = {
         ['أكّد بريدك', 'رابط واحد يصلك فوراً.'],
         ['افحص كودك', 'بلا حدود، وملفاتك محفوظة في حسابك.'],
       ],
-      cta: 'أنشئ حساباً الآن',
+      // زر بطاقة الحساب ينشئ حساباً، فهذا لمن عنده حساب حتى لا يتكرر الزر نفسه
+      cta: 'لديك حساب؟ سجّل الدخول',
     },
-    ctaTitle: 'سجّل الدخول وافحص كودك.',
-    ctaButton: 'أنشئ حساباً مجانياً',
     about: 'محرر أكواد يكتشف الأخطاء ويشرح حلها بالعربية والإنجليزية باستخدام الذكاء الاصطناعي.',
     footerTitle: 'المنتج',
     footerLinks: [
@@ -96,10 +96,8 @@ const copy = {
         ['Confirm your email', 'One link, sent right away.'],
         ['Review your code', 'No limits, and your files are saved to your account.'],
       ],
-      cta: 'Create account now',
+      cta: 'Have an account? Log in',
     },
-    ctaTitle: 'Log in and review your code.',
-    ctaButton: 'Create a free account',
     about: 'A code editor that finds bugs and explains the fix in Arabic and English using AI.',
     footerTitle: 'Product',
     footerLinks: [
@@ -113,10 +111,13 @@ const copy = {
 
 const STEP_STYLES = ['bg-surface', 'bg-surface-2', 'bg-accent-soft', 'bg-accent text-on-accent']
 
+// المتصفحات لا تلتزم دائماً بعلامات العزل ⁦…⁩ داخل النص، فتنقلب < و <= في الجملة العربية؛ عنصر bdi يعزلها فعلاً
+const isolate = (text: string) => text.split(/⁦(.*?)⁩/).map((part, i) => (i % 2 ? <bdi key={i} dir="ltr">{part}</bdi> : part))
+
 // ضغطة الأزرار: انكماش خفيف مع انتقال اللون
 const press = 'transition-[color,background-color,transform] duration-150 active:scale-[0.96]'
 
-export default function LandingSections({ lang, exampleNames, onSignup, showSignup }: Props) {
+export default function LandingSections({ lang, exampleNames, onSignup, onSignin, showSignup }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const lenis = useLenis()
   const c = copy[lang]
@@ -160,7 +161,7 @@ export default function LandingSections({ lang, exampleNames, onSignup, showSign
   return (
     <div ref={rootRef}>
       {/* تعرّف على المحرر: شبكة بطاقات بأربع مزايا */}
-      <section id="meet" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+      <section id="meet" className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-24">
         <div className="text-center">
           <SplitText text={c.meetTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-7xl ${tight}`} />
           <p data-reveal className="mt-3 text-ink-2">
@@ -179,7 +180,7 @@ export default function LandingSections({ lang, exampleNames, onSignup, showSign
               {exampleNames.map((name, i) => (
                 <span
                   key={name}
-                  className={`rounded-s-xl px-5 py-2 text-xl md:text-2xl ${i === 1 ? 'bg-accent text-on-accent' : 'text-ink/60'}`}
+                  className={`whitespace-nowrap rounded-s-xl px-4 py-1.5 text-lg lg:px-5 lg:py-2 lg:text-2xl ${i === 1 ? 'bg-accent text-on-accent' : 'text-ink/60'}`}
                 >
                   {name}
                 </span>
@@ -194,8 +195,8 @@ export default function LandingSections({ lang, exampleNames, onSignup, showSign
             <h3 className={cardTitle}>{c.bilingual.title}</h3>
             <p className="mt-3 max-w-64 text-sm text-ink-2">{c.bilingual.body}</p>
             <div data-parallax className="mt-auto flex w-full max-w-xs flex-col gap-2 self-end pt-6">
-              <span className="self-end rounded-xl bg-surface-2 px-3 py-2 text-xs">{c.bilingual.ask}</span>
-              <span className="rounded-xl bg-accent px-3 py-2 text-xs text-on-accent">{c.bilingual.answer}</span>
+              <span dir="auto" className="self-end rounded-xl bg-surface-2 px-3 py-2 text-xs">{c.bilingual.ask}</span>
+              <span dir="auto" className="rounded-xl bg-accent px-3 py-2 text-xs text-on-accent">{isolate(c.bilingual.answer)}</span>
             </div>
           </article>
 
@@ -237,11 +238,11 @@ export default function LandingSections({ lang, exampleNames, onSignup, showSign
       </section>
 
       {/* كيف يعمل: أربع خطوات بتدرج لوني */}
-      <section id="how" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+      <section id="how" className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-24">
         <SplitText text={c.howTitle} tag="h2" splitType="words" className={`w-full text-4xl ${lead} md:text-5xl ${tight}`} />
         <ol className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {c.steps.map((step, i) => (
-            <li key={step.title} data-card className={`flex min-h-56 flex-col justify-end rounded-2xl p-6 ${STEP_STYLES[i]}`}>
+            <li key={step.title} data-card className={`flex min-h-40 flex-col justify-end sm:min-h-56 rounded-2xl p-6 ${STEP_STYLES[i]}`}>
               <h3 className={cardTitle}>{step.title}</h3>
               <p className="mt-3">{step.body}</p>
             </li>
@@ -252,7 +253,7 @@ export default function LandingSections({ lang, exampleNames, onSignup, showSign
       {showSignup && (
         <>
           {/* الخطط: الحساب المجاني، وبجانبه خطوات البدء */}
-          <section id="plans" className="mx-auto max-w-[1280px] px-4 py-24 md:px-8">
+          <section id="plans" className="mx-auto max-w-[1280px] px-4 py-16 md:px-8 md:py-24">
             <SplitText
               text={c.plansTitle}
               tag="h2"
@@ -302,23 +303,10 @@ export default function LandingSections({ lang, exampleNames, onSignup, showSign
                     </li>
                   ))}
                 </ol>
-                <button onClick={onSignup} className={`mt-8 h-10 rounded-lg bg-surface-2 text-sm font-medium text-ink hover:bg-line ${press}`}>
+                <button onClick={onSignin} className={`mt-8 h-10 rounded-lg bg-surface-2 text-sm font-medium text-ink hover:bg-line ${press}`}>
                   {c.signupSteps.cta}
                 </button>
               </article>
-            </div>
-          </section>
-
-          {/* دعوة للبدء */}
-          <section className="px-4 py-28 text-center">
-            <SplitText text={c.ctaTitle} tag="h2" splitType="words" className={`text-4xl ${lead} md:text-[56px] ${tight}`} />
-            <div data-reveal className="mt-8">
-              <button
-                onClick={onSignup}
-                className={`inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-medium text-on-accent hover:bg-accent-hover ${press}`}
-              >
-                {c.ctaButton} <ArrowIcon />
-              </button>
             </div>
           </section>
         </>

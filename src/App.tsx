@@ -1199,7 +1199,7 @@ function App() {
           </button>
         </section>
 
-        <LandingSections lang={lang} exampleNames={tr.exampleNames} onSignup={() => openAuth('signup')} showSignup={accountLoaded && !user} />
+        <LandingSections lang={lang} exampleNames={tr.exampleNames} onSignup={() => openAuth('signup')} onSignin={() => openAuth('signin')} showSignup={accountLoaded && !user} />
       </main>
 
       {/* نافذة تسجيل الدخول وإنشاء الحساب — تفتح من الهيدر أو عند محاولة الزائر استخدام ميزة للمسجّلين */}
