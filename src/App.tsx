@@ -975,7 +975,7 @@ function App() {
               {/* صندوق المحرر بتصميم صندوق الإدخال */}
               <div className="flex flex-col overflow-hidden rounded-2xl border border-accent-soft bg-surface-2 shadow-sm">
                 {/* شريط أوامر الملفات فوق التبويبات؛ LTR مثل التبويبات والمحرر حتى يبقى على اليسار وبالترتيب نفسه في العربية */}
-                <div dir="ltr" className="flex flex-wrap items-center gap-1 px-2 pt-2">
+                <div dir="ltr" className="flex items-center gap-1 px-2 pt-2">
                   <input
                     ref={importRef}
                     type="file"
@@ -988,35 +988,35 @@ function App() {
                     }}
                     hidden
                   />
-                  <button onClick={newFile} className={labelButton}>
+                  <button onClick={newFile} aria-label={tr.files.new} title={tr.files.new} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 12v6M9 15h6" />
                     </svg>
-                    {tr.files.new}
+                    <span className="hidden sm:inline">{tr.files.new}</span>
                   </button>
-                  <button onClick={() => importRef.current?.click()} className={labelButton}>
+                  <button onClick={() => importRef.current?.click()} aria-label={tr.files.import} title={tr.files.import} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
                     </svg>
-                    {tr.files.import}
+                    <span className="hidden sm:inline">{tr.files.import}</span>
                   </button>
-                  <button onClick={exportFile} disabled={!code} className={labelButton}>
+                  <button onClick={exportFile} disabled={!code} aria-label={tr.files.export} title={tr.files.export} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
                     </svg>
-                    {tr.files.export}
+                    <span className="hidden sm:inline">{tr.files.export}</span>
                   </button>
-                  <button onClick={() => setRenamingId(active.id)} className={labelButton}>
+                  <button onClick={() => setRenamingId(active.id)} aria-label={tr.files.renameAction} title={tr.files.renameAction} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />
                     </svg>
-                    {tr.files.renameAction}
+                    <span className="hidden sm:inline">{tr.files.renameAction}</span>
                   </button>
-                  <button onClick={openVersions} className={labelButton}>
+                  <button onClick={openVersions} aria-label={wc.versions} title={wc.versions} className={labelButton}>
                     <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" />
                     </svg>
-                    {wc.versions}
+                    <span className="hidden sm:inline">{wc.versions}</span>
                   </button>
                 </div>
 
