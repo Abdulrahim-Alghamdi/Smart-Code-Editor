@@ -710,16 +710,19 @@ function App() {
   const updateFile = (id: string, patch: Partial<ProjectFile>) =>
     setFiles((all) => all.map((f) => (f.id === id ? { ...f, ...patch } : f)))
 
-  const setCode = (content: string) => updateFile(active.id, { content })
+  const freeName = (name: string) => uniqueName(name, files.filter((f) => f.id !== active.id).map((f) => f.name))
+
+  // المحرر وزر المسح يمران من هنا: ملف فارغ لا يبقى له ما يبرر اسمه القديم
+  const setCode = (content: string) =>
+    updateFile(active.id, content.trim() ? { content } : { content, name: freeName(fileNameFor(current, content)) })
 
   // اختيار لغة يغيّر امتداد الملف النشط، ومع exampleIndex يحمّل أحد أمثلتها بدل الكود
   const selectLanguage = (id: string, exampleIndex?: number, fileName?: string) => {
     const next = LANGUAGES.find((l) => l.id === id)
     if (!next) return
     if (next.id !== language) closeForLanguageChange()
-    const taken = files.filter((f) => f.id !== active.id).map((f) => f.name)
     const content = exampleIndex === undefined ? active.content : next.examples[exampleIndex]
-    const name = uniqueName(fileName ?? fileNameFor(next, content), taken)
+    const name = freeName(fileName ?? fileNameFor(next, content))
     // المحتوى يُكتب مع المثال فقط: active.content قد يسبق آخر تعديل وصل من المحرر
     updateFile(active.id, { language: next.id, name, ...(exampleIndex !== undefined && { content }) })
     return name
@@ -1473,16 +1476,16 @@ function App() {
                   {tr.tryExample} · {current.label}
                 </span>
                 <div className="flex flex-wrap justify-center gap-2">
-                  {current.examples.map((example, i) => (
+                  {tr.exampleNames.map((label, i) => (
                     <button
                       key={i}
                       onClick={() => {
-                        setCode(example)
+                        selectLanguage(current.id, i)
                         resetRun()
                       }}
                       className={chip}
                     >
-                      {tr.exampleNames[i]}
+                      {label}
                     </button>
                   ))}
                 </div>
