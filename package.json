@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --experimental-strip-types --no-warnings src/account/validation.check.ts && node --experimental-strip-types --no-warnings src/account/settings.check.ts && node --experimental-strip-types --no-warnings src/services/storage.check.ts && node --experimental-strip-types --no-warnings api/_generate.check.ts",
+    "test": "node --experimental-strip-types --no-warnings src/account/validation.check.ts && node --experimental-strip-types --no-warnings src/account/settings.check.ts && node --experimental-strip-types --no-warnings src/services/storage.check.ts && node --experimental-strip-types --no-warnings src/workspace/run.check.ts && node --experimental-strip-types --no-warnings api/_generate.check.ts",
     "preview": "vite preview"
   },
   "dependencies": {

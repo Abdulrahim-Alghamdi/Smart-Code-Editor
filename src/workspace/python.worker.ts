@@ -72,7 +72,7 @@ self.onmessage = async (event: MessageEvent<{ code: string; filename: string; st
   post({ type: 'ready' })
 
   // كل input() يأخذ سطراً، وبعد آخرها undefined تعني نهاية المدخلات (EOFError في بايثون)
-  const inputLines = stdin ? stdin.split('\n') : []
+  const inputLines = stdin ? stdin.replace(/\n$/, '').split('\n') : []
   pyodide.setStdin({ stdin: () => inputLines.shift() })
 
   // متغيرات كل تشغيل في قاموس جديد، فلا يبقى شيء من التشغيل السابق

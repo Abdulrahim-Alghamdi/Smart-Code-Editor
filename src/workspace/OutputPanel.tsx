@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
-import { iconButton, input, outlineButton } from '@/lib/ui'
+import { iconButton } from '@/lib/ui'
 import { LANGUAGES } from '@/lib/languages'
 import { supabase } from '@/lib/supabase'
 import type { WorkspaceCopy } from './copy'
-import { RUN_LIMIT_MS, SERVER_RUN } from './run'
+import { MISSING_INPUT, RUN_LIMIT_MS, SERVER_RUN } from './run'
 import { getCachedRun, putCachedRun, runKey, type Line } from './runCache'
 import { engineLoaded, runInWorker, type Engine } from './workerRunner'
 
@@ -55,7 +55,8 @@ interface Props {
   code: string
   // ما يقرأه البرنامج من المدخلات القياسية (Scanner أو input)؛ التشغيل غير تفاعلي، فتُكتب قبله
   stdin: string
-  onStdin: (value: string) => void
+  // true: البرنامج يقرأ مدخلات ولم تُكتب بعد، فتعرض اللوحة الإرشاد بدل تشغيل سيفشل
+  waiting: boolean
   // true: يتجاهل النتيجة المحفوظة ويشغّل الكود فعلاً ("تشغيل جديد")
   fresh: boolean
   onRerun: () => void
@@ -71,7 +72,7 @@ const RETRY_DELAY_MS = 1_200
 
 // كود المستخدم يعمل في iframe معزول (allow-scripts بلا allow-same-origin): لا يصل لجلسة الحساب ولا لتخزين الموقع.
 // shortcut: حلقة لا تنتهي في JavaScript قد تجمّد التبويب في متصفح لا يعزل iframe في عملية مستقلة؛ انقله لـ Worker إن ظهرت شكاوى
-export function OutputPanel({ name, language, code, stdin, onStdin, fresh, onRerun, onRunFresh, onClose, copy }: Props) {
+export function OutputPanel({ name, language, code, stdin, waiting, fresh, onRerun, onRunFresh, onClose, copy }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [lines, setLines] = useState<Line[]>([])
   const html = language === 'html'
@@ -79,7 +80,7 @@ export function OutputPanel({ name, language, code, stdin, onStdin, fresh, onRer
   const engine: Engine | null = language === 'python' || language === 'sql' ? language : null
   const server = SERVER_RUN.includes(language)
   // loading: أول تشغيل ينتظر تحميل المحرك؛ running: الكود يعمل
-  const [phase, setPhase] = useState<'loading' | 'running' | 'done'>(engine || server ? 'running' : 'done')
+  const [phase, setPhase] = useState<'loading' | 'running' | 'done'>((engine || server) && !waiting ? 'running' : 'done')
   const running = phase !== 'done'
   const [time, setTime] = useState<string | null>(null)
   const [cached, setCached] = useState(false)
@@ -95,7 +96,7 @@ export function OutputPanel({ name, language, code, stdin, onStdin, fresh, onRer
   }, [server, running])
 
   useEffect(() => {
-    if (!engine && !server) return
+    if ((!engine && !server) || waiting) return
     let alive = true
     let stop = () => {}
     // نسخة محلية من الأسطر لحفظها في الكاش بعد الانتهاء
@@ -236,24 +237,10 @@ export function OutputPanel({ name, language, code, stdin, onStdin, fresh, onRer
           </button>
         </div>
       </div>
-      {(server || language === 'python') && (
-        <div className="flex items-end gap-2 border-b border-line p-2">
-          <label className="min-w-0 flex-1 text-xs text-ink-2">
-            {copy.programInput}
-            <textarea
-              dir="auto"
-              rows={2}
-              data-lenis-prevent
-              defaultValue={stdin}
-              maxLength={100_000}
-              onChange={(e) => onStdin(e.target.value)}
-              className={`${input} block resize-none font-mono text-xs`}
-            />
-          </label>
-          <button type="button" onClick={onRerun} className={`${outlineButton} shrink-0`}>
-            {copy.rerun}
-          </button>
-        </div>
+      {(waiting || lines.some((line) => MISSING_INPUT.test(line.text))) && (
+        <p role="status" dir="auto" className="border-b border-line px-3 py-2 text-xs text-amber-300">
+          {copy.inputMissing}
+        </p>
       )}
       {!server && !engine && (
         <iframe
@@ -266,7 +253,7 @@ export function OutputPanel({ name, language, code, stdin, onStdin, fresh, onRer
           className="h-[40vh] w-full bg-white"
         />
       )}
-      {(!html || lines.length > 0) && (
+      {!waiting && (!html || lines.length > 0) && (
         <ol dir="ltr" aria-live="polite" aria-busy={running} className={`max-h-60 overflow-auto p-3 font-mono text-xs leading-5 ${html ? 'border-t border-line' : ''}`}>
           {/* مخرجات بايثون و SQL تظهر أثناء التشغيل، والمؤشر تحتها حتى ينتهي */}
           {lines.map((line, i) => (

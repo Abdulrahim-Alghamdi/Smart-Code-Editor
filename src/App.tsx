@@ -15,7 +15,7 @@ import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } fro
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
 import { OutputPanel } from '@/workspace/OutputPanel'
-import { BROWSER_RUN, SERVER_RUN } from '@/workspace/run'
+import { ACCEPTS_INPUT, BROWSER_RUN, prepareInput, readsInput, SERVER_RUN } from '@/workspace/run'
 import { VersionsDialog } from '@/workspace/VersionsDialog'
 import { localDb, type Snapshot } from '@/services/localDb'
 import { AccountDialog, type AccountTab } from '@/account/AccountDialog'
@@ -347,9 +347,10 @@ function App() {
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // لقطة الكود وقت الضغط على "المخرجات"؛ run يتغير مع كل تشغيل فيُعاد تحميل الإطار وتُمسح المخرجات السابقة
-  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; stdin: string; fresh: boolean; run: number } | null>(null)
+  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; stdin: string; waiting: boolean; fresh: boolean; run: number } | null>(null)
   // مدخلات البرنامج لكل ملف؛ ref لا state حتى لا تعيد الكتابة فيها رسم المحرر
   const programInput = useRef<Record<string, string>>({})
+  const programInputBox = useRef<HTMLTextAreaElement>(null)
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
@@ -386,10 +387,15 @@ function App() {
   // HTML و JavaScript تعمل في المتصفح؛ بايثون وجافا وغيرهما على الخادم، فتحتاج حساباً مثل الفحص
   const runnable = BROWSER_RUN.includes(language) || SERVER_RUN.includes(language)
   // fresh: يتجاهل النتيجة المحفوظة لهذا الكود ويشغّله فعلاً
-  const runOutput = (fresh = false) => {
+  // force: يشغّل بمربع مدخلات فارغ، فكشف قراءة المدخلات من نص الكود قد يخطئ
+  const runOutput = (fresh = false, force = false) => {
     if (SERVER_RUN.includes(language) && needsAccount()) return
-    setOutput({ fileId: active.id, name: active.name, language, code, stdin: programInput.current[active.id] ?? '', fresh, run: (output?.run ?? 0) + 1 })
+    const stdin = programInput.current[active.id] ?? ''
+    const waiting = !force && !stdin.trim() && readsInput(language, code)
+    if (waiting) programInputBox.current?.focus()
+    setOutput({ fileId: active.id, name: active.name, language, code, stdin: prepareInput(language, code, stdin), waiting, fresh, run: (output?.run ?? 0) + 1 })
   }
+  const outputOpen = output?.fileId === active.id && output.language === language
   const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
   // تتحول واجهة البداية إلى مساحة عمل بعمودين عند بدء الفحص
   const panelOpen = Boolean(review || error || loading)
@@ -1138,19 +1144,43 @@ function App() {
                 </div>
 
                 {/* المخرجات للملف ولغته؛ تغيير اللغة بإعادة التسمية (main.js ← main.py) يخفيها أيضاً */}
-                {output?.fileId === active.id && output.language === language && (
+                {ACCEPTS_INPUT.includes(language) && (outputOpen || readsInput(language, code)) && (
+                  <div className="mx-2 mt-2 flex items-end gap-2 rounded-xl border border-line bg-page p-2">
+                    <label className="min-w-0 flex-1 text-xs text-ink-2">
+                      {wc.programInput}
+                      <textarea
+                        key={active.id}
+                        ref={programInputBox}
+                        dir="auto"
+                        rows={4}
+                        data-lenis-prevent
+                        // يُقرأ مرة عند التركيب، و key يعيد التركيب عند تبديل الملف، فلا قيمة قديمة
+                        // oxlint-disable-next-line react/refs
+                        defaultValue={programInput.current[active.id] ?? ''}
+                        maxLength={100_000}
+                        placeholder={wc.programInputHint}
+                        onChange={(e) => {
+                          programInput.current[active.id] = e.target.value
+                        }}
+                        className={`${input} block max-h-40 resize-none field-sizing-content font-mono text-xs`}
+                      />
+                    </label>
+                    <button type="button" onClick={() => runOutput(false, true)} disabled={!code.trim()} className={`${outlineButton} shrink-0`}>
+                      {wc.runProgram}
+                    </button>
+                  </div>
+                )}
+                {outputOpen && (
                   <OutputPanel
                     key={output.run}
                     name={output.name}
                     language={output.language}
                     code={output.code}
                     stdin={output.stdin}
-                    onStdin={(value) => {
-                      programInput.current[output.fileId] = value
-                    }}
+                    waiting={output.waiting}
                     fresh={output.fresh}
-                    onRerun={() => runOutput()}
-                    onRunFresh={() => runOutput(true)}
+                    onRerun={() => runOutput(false, true)}
+                    onRunFresh={() => runOutput(true, true)}
                     onClose={() => setOutput(null)}
                     copy={wc}
                   />
