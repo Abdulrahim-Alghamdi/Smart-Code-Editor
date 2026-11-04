@@ -1,14 +1,17 @@
 // تشغيل الكود داخل Worker: بايثون (Pyodide) و SQL (sql.js). الـ Worker يبقي الصفحة تستجيب أثناء التشغيل،
-// وإنهاؤه هو الطريقة الوحيدة لإيقاف حلقة لا تنتهي
+// وإنهاؤه هو الطريقة الوحيدة لإيقاف حلقة لا تنتهي. بلا مهلة: الكود يعمل على جهاز المستخدم، وإغلاق اللوحة أو "تشغيل من جديد" يوقفه
 export type Engine = 'python' | 'sql'
+
+export interface Line {
+  level: 'log' | 'error'
+  text: string
+}
 
 export type WorkerMessage =
   | { type: 'ready' }
-  | { type: 'line'; level: 'log' | 'error'; text: string }
+  | ({ type: 'line' } & Line)
+  | { type: 'lines'; lines: Line[] }
   | { type: 'done'; error?: string; loadFailed?: boolean }
-
-// مهلة التشغيل بعد جاهزية المحرك (لا يُحسب وقت تحميله الأول)
-const TIME_LIMIT_MS = 15_000
 
 // Worker واحد لكل محرك: يُحمَّل فيه مرة ويبقى للتشغيلات التالية، ويُعاد إنشاؤه فقط بعد إيقاف قسري
 const workers = new Map<Engine, Worker>()
@@ -22,7 +25,7 @@ const create = (engine: Engine) =>
     ? new Worker(new URL('./python.worker.ts', import.meta.url), { type: 'module' })
     : new Worker(new URL('./sql.worker.ts', import.meta.url), { type: 'module' })
 
-export type RunEnd = 'done' | 'timeout' | 'loadFailed' | 'stopped'
+export type RunEnd = 'done' | 'loadFailed' | 'stopped'
 
 interface Handlers {
   onReady: () => void
@@ -32,14 +35,12 @@ interface Handlers {
 export function runInWorker(engine: Engine, code: string, filename: string, { onReady, onLine }: Handlers) {
   const current = workers.get(engine) ?? create(engine)
   workers.set(engine, current)
-  let timer: ReturnType<typeof setTimeout> | undefined
   let finished = false
   let resolveDone: (end: RunEnd) => void = () => {}
   const done = new Promise<RunEnd>((resolve) => (resolveDone = resolve))
   const finish = (end: RunEnd) => {
     if (finished) return
     finished = true
-    clearTimeout(timer)
     current.removeEventListener('message', receive)
     resolveDone(end)
   }
@@ -59,9 +60,10 @@ export function runInWorker(engine: Engine, code: string, filename: string, { on
     if (message.type === 'ready') {
       loaded.add(engine)
       onReady()
-      timer = setTimeout(() => kill('timeout'), TIME_LIMIT_MS)
     } else if (message.type === 'line') {
       onLine(message.level, message.text)
+    } else if (message.type === 'lines') {
+      for (const line of message.lines) onLine(line.level, line.text)
     } else {
       if (message.error) onLine('error', message.error)
       finish(message.loadFailed ? 'loadFailed' : 'done')

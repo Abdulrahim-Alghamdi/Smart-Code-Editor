@@ -4,7 +4,7 @@ import { iconButton } from '@/lib/ui'
 import { LANGUAGES } from '@/lib/languages'
 import { supabase } from '@/lib/supabase'
 import type { WorkspaceCopy } from './copy'
-import { runLimitMs, SERVER_RUN } from './run'
+import { RUN_LIMIT_MS, SERVER_RUN } from './run'
 import { getCachedRun, putCachedRun, runKey, type Line } from './runCache'
 import { engineLoaded, runInWorker, type Engine } from './workerRunner'
 
@@ -99,6 +99,8 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
     const collected: Line[] = []
     const addLine = (line: Line) => {
       collected.push(line)
+      // بلا مهلة، قد لا ينتهي البرنامج أبداً، فلا تكبر النسخة المحلية بلا حد
+      if (collected.length > MAX_LINES) collected.shift()
       setLines((all) => [...all, line].slice(-MAX_LINES))
     }
     const finish = (result: { lines?: Line[]; time: string | null; cache?: string }) => {
@@ -139,16 +141,14 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
         const end = await run.done
         // stopped = هذه اللوحة أوقفته عند إغلاقها أو إعادة تركيبها، فلا تُحدَّث حالتها
         if (end === 'stopped' || !alive) return
-        if (end === 'timeout') addLine({ level: 'warn', text: copy.runTimeout })
         if (end === 'loadFailed') addLine({ level: 'error', text: copy.engineLoadFailed })
         const seconds = end === 'loadFailed' ? null : ((performance.now() - started) / 1000).toFixed(2)
-        // المهلة وفشل التحميل ليسا نتيجة الكود، فلا يُحفظان
+        // فشل التحميل ليس نتيجة الكود، فلا يُحفظ
         return finish({ time: seconds, cache: end === 'done' ? key : undefined })
       }
 
       // مهلة صارمة للتشغيل كله (إعادة المحاولة ضمنها)، وإغلاق اللوحة يلغي الطلب
-      const limit = runLimitMs(language)
-      const deadline = performance.now() + limit
+      const deadline = performance.now() + RUN_LIMIT_MS
       const controller = new AbortController()
       stop = () => controller.abort()
       const call = () =>
@@ -176,7 +176,7 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
       const reply = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null
       const timedOut = reply?.error === 'timeout' || (!reply && performance.now() >= deadline - 100)
       const text = timedOut
-        ? copy.runTookTooLong(label, limit / 1000)
+        ? copy.runTookTooLong(label, RUN_LIMIT_MS / 1000)
         : !(error instanceof FunctionsHttpError)
           ? copy.runNetwork
           : reply?.error === 'busy'

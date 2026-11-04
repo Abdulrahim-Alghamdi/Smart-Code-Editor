@@ -22,10 +22,10 @@ const COMPILERS: Record<string, string[]> = {
 }
 const MAX_CHARS = 100_000
 
-// Total time for a run, retries included. Matches the browser's limit in src/workspace/run.ts minus a margin, so this
-// function always answers before the browser gives up. Go and Rust compile slowly on Wandbox (19-30s measured).
-const LIMIT_MS: Record<string, number> = { go: 30_000, rust: 30_000 }
-const DEFAULT_LIMIT_MS = 15_000
+// Total time for a run, retries included. Matches RUN_LIMIT_MS in src/workspace/run.ts minus a margin, so this function
+// always answers before the browser gives up. More time can't help: measured 2026-11-04, Wandbox ends any request at
+// about 60s (504) and kills a CPU-bound program at about 50s (exit code 137).
+const LIMIT_MS = 60_000
 const ANSWER_MARGIN_MS = 1_500
 // One retry after a temporary failure (busy, 5xx, network), and only if enough time is left for it to finish
 const RETRY_DELAY_MS = 1_200
@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
   if (hit) return reply(200, { ...(hit as object), cached: true })
 
   const started = performance.now()
-  const deadline = started + (LIMIT_MS[language] ?? DEFAULT_LIMIT_MS) - ANSWER_MARGIN_MS
+  const deadline = started + LIMIT_MS - ANSWER_MARGIN_MS
   const source = prepare(language, code)
   let compilerIndex = 0
   let retried = false
@@ -158,19 +158,21 @@ Deno.serve(async (req) => {
 
   const r = attempt.result
   const exit = Number(r.status ?? 0)
+  // 137 is SIGKILL: Wandbox stopped the program, so its partial output isn't a result to keep
+  const killed = exit === 137
   const result = {
     stdout: r.program_output ?? '',
     stderr: tidy(r.program_error, filename),
     compileOutput: tidy(r.compiler_error, filename),
     message: r.signal ? `Signal: ${r.signal}` : '',
     // null when the program exited normally; otherwise the reason, shown to the user
-    status: r.compiler_error && !r.program_output && !r.program_error && exit !== 0 ? 'Compilation Error' : exit !== 0 ? `Exit code ${exit}` : null,
+    status: r.compiler_error && !r.program_output && !r.program_error && exit !== 0 ? 'Compilation Error' : killed ? 'Stopped by the run server (time or memory limit)' : exit !== 0 ? `Exit code ${exit}` : null,
     // Wandbox doesn't report time or memory, so this is the round trip, compile and retries included
     time: ((performance.now() - started) / 1000).toFixed(2),
     memory: null,
   }
   // A killed program (Wandbox's time limit) may finish next time, so it isn't cached
-  if (!r.signal) {
+  if (!r.signal && !killed) {
     cache.delete(key)
     cache.set(key, result)
     // Map keeps insertion order: the first key is the least recently stored
