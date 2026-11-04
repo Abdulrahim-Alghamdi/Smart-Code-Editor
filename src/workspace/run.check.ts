@@ -1,6 +1,17 @@
 // فحوص كشف المدخلات وفصلها. تشغيلها: npm test
 import assert from 'node:assert'
-import { MISSING_INPUT, prepareInput, readsInput } from './run.ts'
+import { inputMode, LIVE_INPUT, MISSING_INPUT, prepareInput, readsInput } from './run.ts'
+
+// طريقة الإدخال لكل مكان تشغيل
+assert.equal(inputMode('python', ''), LIVE_INPUT ? 'live' : 'collect')
+assert.equal(inputMode('javascript', ''), 'replay')
+assert.equal(inputMode('html', ''), 'replay')
+assert.equal(inputMode('java', 'new Scanner(System.in)'), 'replay')
+assert.equal(inputMode('java', 'new BufferedReader(r)'), 'collect', 'readLine gives null, with no reliable signal')
+assert.equal(inputMode('cpp', 'std::cin >> x;'), 'collect')
+assert.equal(inputMode('go', 'fmt.Scan(&x)'), 'collect')
+assert.equal(inputMode('sql', 'SELECT 1'), null)
+assert.equal(prepareInput('javascript', "prompt('a'); prompt('b')", '1 2'), '1\n2')
 
 // الكشف
 assert.ok(readsInput('java', 'Scanner s = new Scanner(System.in);'))

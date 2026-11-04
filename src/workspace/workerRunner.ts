@@ -11,6 +11,7 @@ export type WorkerMessage =
   | { type: 'ready' }
   | ({ type: 'line' } & Line)
   | { type: 'lines'; lines: Line[] }
+  | { type: 'ask' }
   | { type: 'done'; error?: string; loadFailed?: boolean }
 
 // Worker واحد لكل محرك: يُحمَّل فيه مرة ويبقى للتشغيلات التالية، ويُعاد إنشاؤه فقط بعد إيقاف قسري
@@ -30,9 +31,10 @@ export type RunEnd = 'done' | 'loadFailed' | 'stopped'
 interface Handlers {
   onReady: () => void
   onLine: (level: 'log' | 'error', text: string) => void
+  onAsk: () => void
 }
 
-export function runInWorker(engine: Engine, code: string, filename: string, stdin: string, { onReady, onLine }: Handlers) {
+export function runInWorker(engine: Engine, code: string, filename: string, stdin: string, { onReady, onLine, onAsk }: Handlers) {
   const current = workers.get(engine) ?? create(engine)
   workers.set(engine, current)
   let finished = false
@@ -64,6 +66,8 @@ export function runInWorker(engine: Engine, code: string, filename: string, stdi
       onLine(message.level, message.text)
     } else if (message.type === 'lines') {
       for (const line of message.lines) onLine(line.level, line.text)
+    } else if (message.type === 'ask') {
+      onAsk()
     } else {
       if (message.error) onLine('error', message.error)
       finish(message.loadFailed ? 'loadFailed' : 'done')
@@ -75,6 +79,8 @@ export function runInWorker(engine: Engine, code: string, filename: string, stdi
   // stop عند إغلاق اللوحة أو "تشغيل من جديد" أثناء العمل؛ لا يفعل شيئاً بعد انتهاء التشغيل
   return {
     done,
+    // null: نهاية المدخلات
+    answer: (line: string | null) => current.postMessage({ answer: line }),
     stop: () => {
       if (!finished) kill('stopped')
     },

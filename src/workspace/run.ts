@@ -7,8 +7,19 @@ export const SERVER_RUN = ['java', 'c', 'cpp', 'csharp', 'go', 'rust', 'php', 'r
 // الزيادة فوق هذا بلا فائدة: Wandbox ينهي أي طلب عند 60 ثانية تقريباً
 export const RUN_LIMIT_MS = 60_000
 
-// اللغات التي تقرأ مدخلات: HTML و JavaScript و SQL لا تقرأ stdin هنا
-export const ACCEPTS_INPUT = [...SERVER_RUN, 'python']
+// JSPI يترك input() ينتظر فعلاً داخل Worker بلا ترويسات عزل للموقع
+export const LIVE_INPUT = typeof WebAssembly !== 'undefined' && 'Suspending' in WebAssembly
+
+// كيف يصل الإدخال للبرنامج، حسب ما يسمح به مكان التشغيل:
+// live: البرنامج ينتظر فعلاً (بايثون في المتصفح).
+// replay: لا إيقاف مؤقت، لكن نفاد المدخلات ظاهر، فيُسأل المستخدم ويعاد التشغيل بكل الإجابات (Scanner و prompt).
+// collect: Wandbox يغلق stdin، و C و C++ و Go وأمثالها تكمل بقيم فارغة بلا إشارة، فتُكتب المدخلات قبل التشغيل
+export function inputMode(language: string, code: string) {
+  if (language === 'python') return LIVE_INPUT ? 'live' : 'collect'
+  if (language === 'javascript' || language === 'html') return 'replay'
+  if (language === 'java' && /\bScanner\b/.test(code)) return 'replay'
+  return SERVER_RUN.includes(language) ? 'collect' : null
+}
 
 // lines: قراءة سطر كامل في كل مرة. tokens: قراءة أخرى، غالباً كلمة كلمة، فتكفي المسافات بين القيم
 const INPUT_READS: Record<string, { lines?: RegExp; tokens?: RegExp }> = {
@@ -23,6 +34,8 @@ const INPUT_READS: Record<string, { lines?: RegExp; tokens?: RegExp }> = {
   ruby: { lines: /\b(gets|readline)\b/g, tokens: /\bSTDIN\b|\$stdin\b/ },
   typescript: { tokens: /\bprocess\.stdin\b|readFileSync\(\s*0|\/dev\/stdin/ },
   shell: { lines: /(^|[\s;&|(])read\s/g },
+  javascript: { lines: /\bprompt\s*\(/g },
+  html: { lines: /\bprompt\s*\(/g },
 }
 
 const lineReads = (language: string, code: string) => {

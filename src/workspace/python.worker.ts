@@ -1,5 +1,6 @@
 // Python في المتصفح عبر Pyodide (WebAssembly). يعمل في Worker حتى لا تجمّد حلقة لا تنتهي الصفحة، فيُوقف بإنهاء الـ Worker.
 // Pyodide يُحمَّل من CDN عند أول تشغيل فقط، ويبقى جاهزاً للتشغيلات التالية ما دام الـ Worker حياً
+import { LIVE_INPUT } from './run'
 import type { Line, WorkerMessage } from './workerRunner'
 
 const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/'
@@ -12,6 +13,7 @@ interface Pyodide {
   setStderr(handler: { batched: (text: string) => void }): void
   setStdin(handler: { stdin: () => string | undefined }): void
   runPython(code: string): unknown
+  registerJsModule(name: string, module: object): void
   loadPackagesFromImports(code: string): Promise<unknown>
   runPythonAsync(code: string, options: { globals: PyProxy; filename: string }): Promise<unknown>
   globals: { get(name: string): () => PyProxy }
@@ -45,6 +47,38 @@ const write = (level: Line['level'], text: string) => {
   if (held.length > MAX_HELD) held.shift()
 }
 
+// قراءة stdin تنتظر الصفحة دون تجميد الـ Worker. يغطي input و readline والقراءة سطراً سطراً
+const LIVE_STDIN = `
+import io, os, sys
+from pyodide.ffi import can_run_sync, run_sync
+from sce_input import ask
+
+class LiveStdin(io.TextIOBase):
+    def readable(self):
+        return True
+
+    def readline(self, size=-1):
+        if not can_run_sync():
+            return ''
+        sys.stdout.flush()
+        os.fsync(1)
+        line = run_sync(ask())
+        return '' if line is None else line + '\\n'
+
+    def read(self, size=-1):
+        return ''.join(iter(self.readline, ''))
+
+sys.stdin = LiveStdin()
+`
+
+let answer: ((line: string | undefined) => void) | null = null
+const ask = () =>
+  new Promise<string | undefined>((resolve) => {
+    answer = resolve
+    flush()
+    post({ type: 'ask' })
+  })
+
 const load = async (): Promise<Pyodide> => {
   const { loadPyodide } = await import(/* @vite-ignore */ `${PYODIDE_URL}pyodide.mjs`)
   const pyodide: Pyodide = await loadPyodide({ indexURL: PYODIDE_URL })
@@ -53,12 +87,17 @@ const load = async (): Promise<Pyodide> => {
   // كود المستخدم يرى هذا الـ Worker عبر `import js`؛ نخفي تخزين الموقع عنه (سجل النسخ والمسودات في IndexedDB).
   // shortcut: إخفاء لا عزل تام (يمكن تجاوزه عبر prototype)؛ جلسة الحساب في localStorage لا تصلها الـ Workers أصلاً. للعزل الكامل شغّل الـ Worker داخل iframe معزول
   for (const name of ['indexedDB', 'caches']) Object.defineProperty(self, name, { value: undefined })
+  if (LIVE_INPUT) {
+    pyodide.registerJsModule('sce_input', { ask })
+    pyodide.runPython(LIVE_STDIN)
+  }
   return pyodide
 }
 
 let ready: Promise<Pyodide> | null = null
 
-self.onmessage = async (event: MessageEvent<{ code: string; filename: string; stdin: string }>) => {
+self.onmessage = async (event: MessageEvent<{ answer: string | null } | { code: string; filename: string; stdin: string }>) => {
+  if ('answer' in event.data) return answer?.(event.data.answer ?? undefined)
   const { code, filename, stdin } = event.data
   let pyodide: Pyodide
   try {
@@ -73,7 +112,7 @@ self.onmessage = async (event: MessageEvent<{ code: string; filename: string; st
 
   // كل input() يأخذ سطراً، وبعد آخرها undefined تعني نهاية المدخلات (EOFError في بايثون)
   const inputLines = stdin ? stdin.replace(/\n$/, '').split('\n') : []
-  pyodide.setStdin({ stdin: () => inputLines.shift() })
+  if (!LIVE_INPUT) pyodide.setStdin({ stdin: () => inputLines.shift() })
 
   // متغيرات كل تشغيل في قاموس جديد، فلا يبقى شيء من التشغيل السابق
   const globals = pyodide.globals.get('dict')()

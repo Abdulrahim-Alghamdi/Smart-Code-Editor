@@ -15,7 +15,7 @@ import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } fro
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
 import { OutputPanel } from '@/workspace/OutputPanel'
-import { ACCEPTS_INPUT, BROWSER_RUN, prepareInput, readsInput, SERVER_RUN } from '@/workspace/run'
+import { BROWSER_RUN, inputMode, readsInput, SERVER_RUN } from '@/workspace/run'
 import { VersionsDialog } from '@/workspace/VersionsDialog'
 import { localDb, type Snapshot } from '@/services/localDb'
 import { AccountDialog, type AccountTab } from '@/account/AccountDialog'
@@ -350,7 +350,6 @@ function App() {
   const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; stdin: string; waiting: boolean; fresh: boolean; run: number } | null>(null)
   // مدخلات البرنامج لكل ملف؛ ref لا state حتى لا تعيد الكتابة فيها رسم المحرر
   const programInput = useRef<Record<string, string>>({})
-  const programInputBox = useRef<HTMLTextAreaElement>(null)
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
@@ -391,9 +390,8 @@ function App() {
   const runOutput = (fresh = false, force = false) => {
     if (SERVER_RUN.includes(language) && needsAccount()) return
     const stdin = programInput.current[active.id] ?? ''
-    const waiting = !force && !stdin.trim() && readsInput(language, code)
-    if (waiting) programInputBox.current?.focus()
-    setOutput({ fileId: active.id, name: active.name, language, code, stdin: prepareInput(language, code, stdin), waiting, fresh, run: (output?.run ?? 0) + 1 })
+    const waiting = !force && !stdin.trim() && inputMode(language, code) === 'collect' && readsInput(language, code)
+    setOutput({ fileId: active.id, name: active.name, language, code, stdin, waiting, fresh, run: (output?.run ?? 0) + 1 })
   }
   const outputOpen = output?.fileId === active.id && output.language === language
   const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
@@ -1144,32 +1142,6 @@ function App() {
                 </div>
 
                 {/* المخرجات للملف ولغته؛ تغيير اللغة بإعادة التسمية (main.js ← main.py) يخفيها أيضاً */}
-                {ACCEPTS_INPUT.includes(language) && (outputOpen || readsInput(language, code)) && (
-                  <div className="mx-2 mt-2 flex items-end gap-2 rounded-xl border border-line bg-page p-2">
-                    <label className="min-w-0 flex-1 text-xs text-ink-2">
-                      {wc.programInput}
-                      <textarea
-                        key={active.id}
-                        ref={programInputBox}
-                        dir="auto"
-                        rows={4}
-                        data-lenis-prevent
-                        // يُقرأ مرة عند التركيب، و key يعيد التركيب عند تبديل الملف، فلا قيمة قديمة
-                        // oxlint-disable-next-line react/refs
-                        defaultValue={programInput.current[active.id] ?? ''}
-                        maxLength={100_000}
-                        placeholder={wc.programInputHint}
-                        onChange={(e) => {
-                          programInput.current[active.id] = e.target.value
-                        }}
-                        className={`${input} block max-h-40 resize-none field-sizing-content font-mono text-xs`}
-                      />
-                    </label>
-                    <button type="button" onClick={() => runOutput(false, true)} disabled={!code.trim()} className={`${outlineButton} shrink-0`}>
-                      {wc.runProgram}
-                    </button>
-                  </div>
-                )}
                 {outputOpen && (
                   <OutputPanel
                     key={output.run}
@@ -1177,6 +1149,9 @@ function App() {
                     language={output.language}
                     code={output.code}
                     stdin={output.stdin}
+                    onStdin={(value) => {
+                      programInput.current[output.fileId] = value
+                    }}
                     waiting={output.waiting}
                     fresh={output.fresh}
                     onRerun={() => runOutput(false, true)}
