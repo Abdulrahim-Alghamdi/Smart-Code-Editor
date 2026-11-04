@@ -63,4 +63,29 @@ for (const code of ['', '   ', 'x', 'hello world', 'a = 1', '// just a comment',
 assert.equal(detectLanguage('public class Q {\n  private String sql = "SELECT id FROM users";\n}'), 'java')
 assert.equal(detectLanguage('query = "SELECT * FROM t"\nfor row in rows:\n    print(row)'), 'python')
 
+// البنية الخارجية تحكم لا النص الذي يطبعه البرنامج
+const page = '<!DOCTYPE html><html><body><script>console.log(1)</script></body></html>'
+const wrapped: [string, string][] = [
+  ['cpp', '#include <iostream>\nint main() {\n  std::cout << "' + page + '";\n}'],
+  ['cpp', '#include <iostream>\nint main() {\n  std::cout << R"html(\n' + page + '\n)html";\n}'],
+  ['python', 'html = """\n' + page + '\n"""\nprint(html)'],
+  ['python', 'q = """\nSELECT id\nFROM users\n"""\nfor row in rows:\n    print(row)'],
+  ['java', 'public class Page {\n  public static void main(String[] a) {\n    System.out.println("' + page + '");\n  }\n}'],
+  ['java', 'class Page {\n  String html = """\n' + page + '\n""";\n  public static void main(String[] a) {}\n}'],
+  ['javascript', 'const page = \u0060\n' + page + '\n\u0060;\nconsole.log(page);'],
+  ['go', 'package main\nimport "fmt"\nfunc main() {\n\tfmt.Println(\u0060' + page + '\u0060)\n}'],
+  ['rust', 'fn main() {\n    println!("{}", r#"' + page + '"#);\n}'],
+  ['php', '<?php\necho "<html><body></body></html>";'],
+  ['php', '<?php $title = "x"; ?>\n<!DOCTYPE html>\n<html><body></body></html>'],
+  ['php', '<html>\n<body><?php echo "hi"; ?></body>\n</html>'],
+  ['html', '<!DOCTYPE html>\n<html>\n<body>\n<script>\nconst x = 1;\nfunction go() { console.log("x"); }\ndocument.title = "a";\n</script>\n</body>\n</html>'],
+  ['html', '<div class="a">\n<script>\nconsole.log(1);\nfunction go() { return 1; }\n</script>\n<p>Don\'t stop</p>\n</div>'],
+  ['html', '<!-- page -->\n<!DOCTYPE html>\n<html><head><style>\n.card { margin: 0; color: red; }\n</style></head><body></body></html>'],
+  ['html', '<!-- page -->\n<script>\nconst x = 1;\nfunction go() { console.log("x"); }\ndocument.title = "a";\n</script>'],
+  ['typescript', '<T>(x: T): T => x;\nconst y: number = 1;'],
+  ['dart', "import 'dart:io';\nvoid main() {\n  print('x');\n}"],
+  ['markdown', '# Title\n\n\u0060\u0060\u0060python\nprint("x")\n\u0060\u0060\u0060\n'],
+]
+for (const [expected, code] of wrapped) assert.equal(detectLanguage(code), expected, code)
+
 console.log(`language checks passed (${right} examples recognised, ${unsure} left undecided)`)

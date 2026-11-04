@@ -120,7 +120,7 @@ const SIGNALS: Record<string, Signals> = {
     [/\bnil\b/, 1],
   ],
   php: [
-    [/<\?(php|=)/, 10],
+    [/<\?(php|=)/, 20],
     [/\$\w+\s*=[^=]/, 2],
     [/\$this->/, 3],
     [/\becho\s+["'$]/, 1],
@@ -194,6 +194,11 @@ const SIGNALS: Record<string, Signals> = {
   ],
 }
 
+// محتوى النصوص بيانات البرنامج لا بنيته، فبرنامج يطبع HTML يبقى بلغته. أسطر الاستيراد وحدود كتل Markdown تبقى لأن بصماتها فيها
+const STRINGS = /(^[ \t]*(?:import\b|```).*$)|R"(\w*)\([\s\S]*?\)\2"|\br(#*)"[\s\S]*?"\3|"""[\s\S]*?"""|'''[\s\S]*?'''|`(?:[^`\\]|\\[\s\S])*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/gm
+// يبدأ بإعلان مستند أو بوسم له إغلاق: الوسوم هي الغلاف الخارجي، وما بداخلها من script وstyle جزء منها
+const MARKUP = /^<(!doctype\s+html|[a-z!][\s\S]*<\/[a-z])/i
+
 const score = (code: string, signals: Signals) => signals.reduce((total, [pattern, weight]) => total + (pattern.test(code) ? weight : 0), 0)
 
 const isJson = (code: string) => {
@@ -210,9 +215,12 @@ export function detectLanguage(code: string): string | null {
   if (!text) return null
   if (/^[[{]/.test(text) && isJson(text)) return 'json'
 
-  const scores = Object.entries(SIGNALS).map(([id, signals]) => [id, score(text, signals)] as const)
-  const only = score(text, TYPESCRIPT_ONLY)
-  if (only) scores.push(['typescript', score(text, JAVASCRIPT) + only])
+  if (MARKUP.test(text)) return /<\?(php|=)/.test(text) ? 'php' : 'html'
+
+  const structure = text.replace(STRINGS, (_, kept) => kept ?? '""')
+  const scores = Object.entries(SIGNALS).map(([id, signals]) => [id, score(structure, signals)] as const)
+  const only = score(structure, TYPESCRIPT_ONLY)
+  if (only) scores.push(['typescript', score(structure, JAVASCRIPT) + only])
   const [best, second] = scores.sort((a, b) => b[1] - a[1])
   return best[1] >= MIN_SCORE && best[1] > second[1] ? best[0] : null
 }

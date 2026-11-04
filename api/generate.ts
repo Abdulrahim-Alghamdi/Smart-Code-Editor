@@ -15,9 +15,9 @@ const MAX_PROMPT_CHARS = 4_000
 const MAX_LANGUAGE_CHARS = 30
 
 const systemPrompt = (language: string) => `You generate code for a code editor. The active file's language is ${language}.
-Write only ${language} that does what the user asks, even if they name another language.
+Write what the user asks in the language they name; if they name none, use ${language}.
 Your reply is inserted straight into the file, so return raw code: no Markdown, no code fences, and no text before or after the code.
-Put any explanation in ${language} comments, and only where the code needs one.`
+Put any explanation in code comments, and only where the code needs one.`
 
 // The body comes from the browser, so check its shape and size before spending tokens on it
 export const parseRequest = (raw: unknown): { prompt: string; language: string } | null => {

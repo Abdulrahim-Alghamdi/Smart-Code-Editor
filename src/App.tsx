@@ -741,12 +741,14 @@ function App() {
   useEffect(applyTabSize, [editorSettings.tabSize, active.id])
 
   // اللصق يحدد اللغة إذا صار هو الملف كله فقط، فمقتطف داخل ملف قائم لا يغيّر لغته. أما جافا فتُضبط بعد أي لصق لأن قواعدها تخص الملف كله
-  const afterPaste = (pasted: string) => {
+  const afterInsert = (inserted: string) => {
     const editor = editorRef.current
     const model = editor?.getModel()
     if (!editor || !model) return
     const text = model.getValue()
-    const whole = pasted.trim() === text.trim()
+    // نص الخادم بفواصل LF وقد يخزنه Monaco بـCRLF
+    const flat = (code: string) => code.replaceAll('\r\n', '\n').trim()
+    const whole = flat(inserted) === flat(text)
     if (whole) resetRun()
     const detected = whole ? detectLanguage(text) : null
     const next = detected ?? language
@@ -940,9 +942,9 @@ function App() {
   }
 
   // اختصارات لوحة المفاتيح. مرحلة الالتقاط تسبق Monaco، فلا ينفّذ أمره الافتراضي (Ctrl+Enter عنده يضيف سطراً)
-  const pasteAction = useRef(afterPaste)
+  const insertAction = useRef(afterInsert)
   useEffect(() => {
-    pasteAction.current = afterPaste
+    insertAction.current = afterInsert
   })
   const shortcutActions = useRef({ analyze: loading ? stopAnalyze : analyzeCode, save: () => code && exportFile() })
   useEffect(() => {
@@ -1085,7 +1087,7 @@ function App() {
                     needsAccount={needsAccount}
                     renewSession={renewSession}
                     keepVersion={keepVersion}
-                    onReplace={resetRun}
+                    onInserted={(code) => insertAction.current(code)}
                     copy={wc}
                   />
                 </div>
@@ -1161,7 +1163,7 @@ function App() {
                       editorRef.current = editor
                       monacoRef.current = monaco
                       applyTabSize()
-                      editor.onDidPaste(({ range }) => pasteAction.current(editor.getModel()?.getValueInRange(range) ?? ''))
+                      editor.onDidPaste(({ range }) => insertAction.current(editor.getModel()?.getValueInRange(range) ?? ''))
                     }}
                     theme="vs-dark"
                     loading={
