@@ -375,9 +375,10 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
       )}
       {!waiting && (!html || lines.length > 0) && (
         <ol ref={listRef} dir="ltr" aria-live="polite" aria-busy={running && !asking} data-lenis-prevent={scrollable || undefined} className={`max-h-60 overflow-auto ${scrollable ? 'overscroll-contain' : ''} p-3 font-mono text-xs leading-5 ${html ? 'border-t border-line' : ''}`}>
-          {/* مخرجات بايثون و SQL تظهر أثناء التشغيل، والمؤشر تحتها حتى ينتهي */}
+          {/* مخرجات بايثون و SQL تظهر أثناء التشغيل، والمؤشر تحتها حتى ينتهي.
+              plaintext يحدد اتجاه كل سطر من نصه، فلا تنقلب النقطتان والأرقام في سطر عربي، والمحاذاة تبقى يساراً كالطرفية */}
           {lines.map((line, i) => (
-            <li key={i} className={`whitespace-pre-wrap break-words ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-300' : line.level === 'input' ? 'text-accent' : 'text-ink'}`}>
+            <li key={i} className={`whitespace-pre-wrap break-words text-left [unicode-bidi:plaintext] ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-300' : line.level === 'input' ? 'text-accent' : 'text-ink'}`}>
               {line.level === 'input' && '› '}
               {line.text}
             </li>

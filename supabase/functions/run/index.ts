@@ -2,6 +2,7 @@
 // Signed-in users only, like the AI review: Wandbox rate-limits by IP, and every user's runs share this function's IP.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders, forbidden } from '../_shared/cors.ts'
+import { forMono } from '../_shared/csharpSource.ts'
 import { forWandbox } from '../_shared/javaSource.ts'
 
 // The editor's language ids → Wandbox compilers, primary first, then a fallback used when the primary's container is down.
@@ -22,6 +23,9 @@ const COMPILERS: Record<string, string[]> = {
   shell: ['bash'],
 }
 const MAX_CHARS = 100_000
+// Wandbox's locale is POSIX, so the JVM encodes System.out and System.err as ASCII and writes a literal ? for every
+// non-ASCII character. These are JVM flags, one per line; javac already reads source as UTF-8 and rejects them.
+const RUNTIME_OPTIONS: Record<string, string> = { java: '-Dstdout.encoding=UTF-8\n-Dstderr.encoding=UTF-8' }
 
 // Total time for a run, retries included. Matches RUN_LIMIT_MS in src/workspace/run.ts minus a margin, so this function
 // always answers before the browser gives up. More time can't help: measured 2026-11-04, Wandbox ends any request at
@@ -56,7 +60,7 @@ interface WandboxResult {
 // (try the fallback compiler). timeout: out of time. request: Wandbox refused the request itself.
 type Attempt = { ok: true; result: WandboxResult } | { ok: false; kind: 'busy' | 'unavailable' | 'timeout' | 'request'; detail?: string }
 
-const prepare = (language: string, code: string) => (language === 'java' ? forWandbox(code) : code)
+const prepare = (language: string, code: string) => (language === 'java' ? forWandbox(code) : language === 'csharp' ? forMono(code) : code)
 
 // Wandbox's messages point at its own server: Go adds a "# _/home/wandbox" header line, and paths read
 // /home/wandbox/prog.go or ./prog.go. Show them as the user's file instead, e.g. "main.go:6:31: syntax error"
@@ -67,13 +71,13 @@ const tidy = (text: string | undefined, filename: string) =>
 
 // One call to Wandbox. Raw server errors (HTML error pages, "Too many requests", container failures) become an Attempt
 // kind here, so none of them reach the user as-is
-async function compile(compiler: string, code: string, stdin: string, timeoutMs: number): Promise<Attempt> {
+async function compile(compiler: string, code: string, stdin: string, runtimeOptions: string | undefined, timeoutMs: number): Promise<Attempt> {
   try {
     const res = await fetch('https://wandbox.org/api/compile.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // save: false keeps the code off Wandbox's public permalinks
-      body: JSON.stringify({ compiler, code, stdin, save: false }),
+      body: JSON.stringify({ compiler, code, stdin, save: false, 'runtime-option-raw': runtimeOptions }),
       signal: AbortSignal.timeout(timeoutMs),
     })
     const body = await res.text()
@@ -138,7 +142,7 @@ Deno.serve(async (req) => {
   let attempt: Attempt
   for (;;) {
     // AbortSignal.timeout needs a whole number of milliseconds
-    attempt = await compile(compilers[compilerIndex], source, stdin, Math.max(1, Math.floor(deadline - performance.now())))
+    attempt = await compile(compilers[compilerIndex], source, stdin, RUNTIME_OPTIONS[language], Math.max(1, Math.floor(deadline - performance.now())))
     if (attempt.ok || attempt.kind === 'request' || attempt.kind === 'timeout') break
     // container down: switch to the fallback compiler straight away
     if (attempt.kind === 'unavailable' && compilerIndex + 1 < compilers.length) {

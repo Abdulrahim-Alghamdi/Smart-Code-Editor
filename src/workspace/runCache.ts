@@ -14,9 +14,12 @@ export interface CachedRun {
 // الذاكرة للتشغيل المتكرر في الجلسة نفسها، و IndexedDB ليبقى بعد إعادة تحميل الصفحة
 const memory = new Map<string, CachedRun>()
 
+// يُرفع عند تغيّر ناتج الخادم للكود نفسه، وإلا تبقى النتائج القديمة تُعرض كأن الإصلاح لم يعمل
+const RESULTS_VERSION = 2
+
 // SHA-256 للغة واسم الملف والكود: اسم الملف داخل الكاش لأن رسائل الأخطاء تذكره
 export async function runKey(language: string, name: string, code: string) {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${language}\0${name}\0${code}`))
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${RESULTS_VERSION}\0${language}\0${name}\0${code}`))
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
