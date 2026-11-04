@@ -113,8 +113,11 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
   // replay: ما عُرض من مخرجات البرنامج، وخطأ نفاد المدخلات يُعرض إن أنهى المستخدم الإدخال
   const seen = useRef('')
   const failure = useRef<Line[]>([])
+  // Lenis يلتقط العجلة قبل القائمة فيحرّك الصفحة، فيُستثنى منها ما يتمرر فعلاً. مخرجات قصيرة تترك العجلة للصفحة
+  const listRef = useRef<HTMLOListElement>(null)
+  const [scrollable, setScrollable] = useState(false)
 
-  const echo = (values: string[]) => setLines((all) => [...all, ...values.map((text) => ({ level: 'input', text }))].slice(-MAX_LINES))
+  const echo =(values: string[]) => setLines((all) => [...all, ...values.map((text) => ({ level: 'input', text }))].slice(-MAX_LINES))
   // live: يعطي البرنامج القيمة التالية، أو يعرض حقل الإدخال إن لم تبق قيم
   const feed = () => {
     const line = queue.current.shift()
@@ -150,6 +153,11 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
       setInputs((all) => [...all, null])
     }
   }
+
+  useEffect(() => {
+    const list = listRef.current
+    setScrollable(Boolean(list && list.scrollHeight > list.clientHeight))
+  }, [lines, asking])
 
   useEffect(() => {
     if (!server || !running) return
@@ -363,7 +371,7 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
         />
       )}
       {!waiting && (!html || lines.length > 0) && (
-        <ol dir="ltr" aria-live="polite" aria-busy={running && !asking} className={`max-h-60 overflow-auto p-3 font-mono text-xs leading-5 ${html ? 'border-t border-line' : ''}`}>
+        <ol ref={listRef} dir="ltr" aria-live="polite" aria-busy={running && !asking} data-lenis-prevent={scrollable || undefined} className={`max-h-60 overflow-auto ${scrollable ? 'overscroll-contain' : ''} p-3 font-mono text-xs leading-5 ${html ? 'border-t border-line' : ''}`}>
           {/* مخرجات بايثون و SQL تظهر أثناء التشغيل، والمؤشر تحتها حتى ينتهي */}
           {lines.map((line, i) => (
             <li key={i} className={`whitespace-pre-wrap break-words ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-300' : line.level === 'input' ? 'text-accent' : 'text-ink'}`}>
