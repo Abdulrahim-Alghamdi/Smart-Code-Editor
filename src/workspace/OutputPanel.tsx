@@ -346,7 +346,7 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
               maxLength={100_000}
               placeholder={copy.programInputHint}
               onChange={(e) => onStdin(e.target.value)}
-              className={`${input} block max-h-40 resize-none field-sizing-content font-mono text-xs`}
+              className={`${input} block min-h-20 max-h-40 resize-none field-sizing-content font-mono text-xs`}
             />
           </label>
           <button type="button" onClick={onRerun} disabled={!code.trim()} className={`${outlineButton} shrink-0`}>

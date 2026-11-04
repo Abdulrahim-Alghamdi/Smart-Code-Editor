@@ -350,13 +350,22 @@ function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // لقطة الكود وقت الضغط على "المخرجات"؛ run يتغير مع كل تشغيل فيُعاد تحميل الإطار وتُمسح المخرجات السابقة
   const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; stdin: string; waiting: boolean; fresh: boolean; run: number } | null>(null)
-  // مدخلات البرنامج لكل ملف؛ ref لا state حتى لا تعيد الكتابة فيها رسم المحرر
-  const programInput = useRef<Record<string, string>>({})
+  // ref لا state حتى لا تعيد الكتابة فيها رسم المحرر
+  const programInput = useRef('')
+  // المدخلات والمخرجات تخص الكود الذي كُتبت له، وتُفقد معه: بقاؤها يُفشل الكود الجديد بقيم ليست له
+  const resetRun = () => {
+    programInput.current = ''
+    setOutput(null)
+  }
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
   const [files, setFiles] = useState<ProjectFile[]>([FIRST_FILE])
-  const [activeId, setActiveId] = useState<string>(FIRST_FILE.id)
+  const [activeId, setActiveFile] = useState<string>(FIRST_FILE.id)
+  const setActiveId = (id: string) => {
+    if (id !== activeId) resetRun()
+    setActiveFile(id)
+  }
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [review, setReview] = useState<Review | null>(null)
   const [error, setError] = useState<{ key: ErrorKey; detail?: string } | null>(null)
@@ -391,7 +400,7 @@ function App() {
   // force: يشغّل بمربع مدخلات فارغ، فكشف قراءة المدخلات من نص الكود قد يخطئ
   const runOutput = (fresh = false, force = false) => {
     if (SERVER_RUN.includes(language) && needsAccount()) return
-    const stdin = programInput.current[active.id] ?? ''
+    const stdin = programInput.current
     const waiting = !force && !stdin.trim() && inputMode(language, code) === 'collect' && readsInput(language, code)
     setOutput({ fileId: active.id, name: active.name, language, code, stdin, waiting, fresh, run: (output?.run ?? 0) + 1 })
   }
@@ -564,6 +573,7 @@ function App() {
     if (!(await confirm({ ...wc.confirms.clearEditor(active.name), cancel: wc.cancel, danger: true }))) return
     await keepVersion()
     setCode('')
+    resetRun()
   }
 
   // بعد الحذف تُقرأ القائمة من جديد، فتعكس ما في التخزين فعلاً ولو فشل الحذف
@@ -576,6 +586,7 @@ function App() {
     await keepVersion()
     await localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content: snapshot.content }, true).catch(console.error)
     setCode(snapshot.content)
+    resetRun()
     setVersions(null)
     notify(wc.toasts.versionRestored, 'success')
   }
@@ -675,7 +686,9 @@ function App() {
     if (wasSignedIn.current && !signedIn) {
       const starter = { ...FIRST_FILE, id: newId() }
       setFiles([starter])
-      setActiveId(starter.id)
+      setActiveFile(starter.id)
+      programInput.current = ''
+      setOutput(null)
       setReview(null)
       setError(null)
       // تُقرأ المسودات من جديد عند الدخول التالي، لا تلك المقروءة في هذه الجلسة
@@ -733,7 +746,9 @@ function App() {
     const model = editor?.getModel()
     if (!editor || !model) return
     const text = model.getValue()
-    const detected = pasted.trim() === text.trim() ? detectLanguage(text) : null
+    const whole = pasted.trim() === text.trim()
+    if (whole) resetRun()
+    const detected = whole ? detectLanguage(text) : null
     const next = detected ?? language
     const java = next === 'java'
     const extra = java ? extraPublics(text) : []
@@ -824,7 +839,7 @@ function App() {
 
   // المخرجات والفحص كانا للكود بلغته السابقة، فيُغلقان عند تغيير لغة الملف النشط؛ فحص جارٍ يُلغى بهدوء بلا رسالة
   const closeForLanguageChange = () => {
-    setOutput(null)
+    resetRun()
     analyzeAbort.current?.abort()
     analyzeAbort.current = null
     setLoading(false)
@@ -1070,6 +1085,7 @@ function App() {
                     needsAccount={needsAccount}
                     renewSession={renewSession}
                     keepVersion={keepVersion}
+                    onReplace={resetRun}
                     copy={wc}
                   />
                 </div>
@@ -1190,7 +1206,7 @@ function App() {
                     code={output.code}
                     stdin={output.stdin}
                     onStdin={(value) => {
-                      programInput.current[output.fileId] = value
+                      programInput.current = value
                     }}
                     waiting={output.waiting}
                     fresh={output.fresh}
@@ -1454,7 +1470,14 @@ function App() {
                 </span>
                 <div className="flex flex-wrap justify-center gap-2">
                   {current.examples.map((example, i) => (
-                    <button key={i} onClick={() => setCode(example)} className={chip}>
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setCode(example)
+                        resetRun()
+                      }}
+                      className={chip}
+                    >
                       {tr.exampleNames[i]}
                     </button>
                   ))}

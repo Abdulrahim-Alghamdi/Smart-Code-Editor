@@ -15,12 +15,13 @@ interface Props {
   needsAccount: () => boolean
   renewSession: () => Promise<boolean>
   keepVersion: (content: string) => unknown
+  onReplace: () => void
   copy: WorkspaceCopy
 }
 
 // حالة النافذة كلها هنا، فالكتابة في الوصف لا تعيد رسم App والمحرر. الكود يدخل بأوامر Monaco نفسها،
 // فيصل App عبر onChange مثل أي تعديل: تعمل المزامنة والسجل وCtrl+Z بلا مسار ثانٍ
-export function AIGenerator({ editorRef, language, needsAccount, renewSession, keepVersion, copy }: Props) {
+export function AIGenerator({ editorRef, language, needsAccount, renewSession, keepVersion, onReplace, copy }: Props) {
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState<Mode | null>(null)
@@ -43,6 +44,7 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
     const before = model.getValue()
     // الاستبدال يُثبّت المحتوى في السجل أولاً، مثل كل فعل يستبدل الملف
     if (mode === 'replace' && before.trim()) keepVersion(before)
+    if (mode === 'replace') onReplace()
     const range = mode === 'replace' ? model.getFullModelRange() : editor.getSelection()!
     // نقطتا التوقف تجعلان Ctrl+Z يلغي الكود المولّد وحده
     editor.pushUndoStop()
