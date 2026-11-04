@@ -11,7 +11,7 @@ import { KEYS } from '@/services/storage'
 import { useStored } from '@/services/useStored'
 import { AIGenerator } from '@/workspace/AIGenerator'
 import { workspaceCopy } from '@/workspace/copy'
-import { detectLanguage } from '@/workspace/detectLanguage'
+import { detectLanguage, fileNameFor } from '@/workspace/detectLanguage'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
@@ -718,11 +718,11 @@ function App() {
     if (!next) return
     if (next.id !== language) closeForLanguageChange()
     const taken = files.filter((f) => f.id !== active.id).map((f) => f.name)
-    updateFile(active.id, {
-      language: next.id,
-      name: uniqueName(fileName ?? withExt(active.name, next.ext), taken),
-      ...(exampleIndex !== undefined && { content: next.examples[exampleIndex] }),
-    })
+    const content = exampleIndex === undefined ? active.content : next.examples[exampleIndex]
+    const name = uniqueName(fileName ?? fileNameFor(next, content), taken)
+    // المحتوى يُكتب مع المثال فقط: active.content قد يسبق آخر تعديل وصل من المحرر
+    updateFile(active.id, { language: next.id, name, ...(exampleIndex !== undefined && { content }) })
+    return name
   }
 
   // Monaco يعيد استخدام نموذج الملف بلغته القديمة إذا تغيرت لغة الملف وهو غير نشط، فنزامنها عند كل تبديل
@@ -752,6 +752,7 @@ function App() {
     if (whole) resetRun()
     const detected = whole ? detectLanguage(text) : null
     const next = detected ?? language
+    const target = LANGUAGES.find((l) => l.id === next) ?? current
     const java = next === 'java'
     const extra = java ? extraPublics(text) : []
     if (extra.length) {
@@ -766,12 +767,13 @@ function App() {
       )
       editor.pushUndoStop()
     }
-    const fileName = java ? (javaFileName(text) ?? (detected ? 'Main.java' : undefined)) : undefined
+    // مقتطف داخل ملف لا يغيّر اسمه، إلا جافا لأن المترجم يربط الاسم بالصنف
+    const fileName = whole && text.trim() ? fileNameFor(target, text) : java ? javaFileName(text) : undefined
     if (next === language && !fileName) return
-    selectLanguage(next, undefined, fileName)
+    const name = selectLanguage(next, undefined, fileName)
     const notes = [
-      next !== language && wc.toasts.languageDetected(LANGUAGES.find((l) => l.id === next)?.label ?? next),
-      fileName && fileName !== active.name && wc.toasts.fileRenamed(fileName),
+      next !== language && wc.toasts.languageDetected(target.label),
+      name && name !== active.name && wc.toasts.fileRenamed(name),
       extra.length > 0 && wc.toasts.publicRemoved(extra.length),
     ].filter(Boolean)
     if (notes.length) notify(notes.join(' · '), 'success')

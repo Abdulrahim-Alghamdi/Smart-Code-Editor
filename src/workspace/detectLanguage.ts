@@ -1,5 +1,7 @@
 // يتعرف على لغة كود ملصوق من بصمات نحوية عامة. لا توجد قاعدة تخص نطاقاً أو مثالاً بعينه، وكل نمط وزنه يعبّر عن قوة دلالته:
 // 5 فأكثر يكفي وحده، وما دونه يحتاج دليلاً آخر. shortcut: مطابقة أنماط لا محلل نحوي؛ مقتطف قصير بلا سمات واضحة لا يُحسم
+import { javaFileName } from '../../supabase/functions/_shared/javaSource.ts'
+
 type Signals = [RegExp, number][]
 
 // أقل مجموع لتغيير اللغة؛ الشك يبقي لغة الملف كما هي، فالتبديل الخاطئ أسوأ من عدم التبديل
@@ -195,9 +197,11 @@ const SIGNALS: Record<string, Signals> = {
 }
 
 // محتوى النصوص بيانات البرنامج لا بنيته، فبرنامج يطبع HTML يبقى بلغته. أسطر الاستيراد وحدود كتل Markdown تبقى لأن بصماتها فيها
-const STRINGS = /(^[ \t]*(?:import\b|```).*$)|R"(\w*)\([\s\S]*?\)\2"|\br(#*)"[\s\S]*?"\3|"""[\s\S]*?"""|'''[\s\S]*?'''|`(?:[^`\\]|\\[\s\S])*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/gm
+const STRINGS = /(^[ \t]*(?:import\b|```).*$)|\/\*[\s\S]*?\*\/|R"(\w*)\([\s\S]*?\)\2"|\br(#*)"[\s\S]*?"\3|"""[\s\S]*?"""|'''[\s\S]*?'''|`(?:[^`\\]|\\[\s\S])*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/gm
 // يبدأ بإعلان مستند أو بوسم له إغلاق: الوسوم هي الغلاف الخارجي، وما بداخلها من script وstyle جزء منها
 const MARKUP = /^<(!doctype\s+html|[a-z!][\s\S]*<\/[a-z])/i
+
+const structureOf = (code: string) => code.replace(STRINGS, (_, kept) => kept ?? '""')
 
 const score = (code: string, signals: Signals) => signals.reduce((total, [pattern, weight]) => total + (pattern.test(code) ? weight : 0), 0)
 
@@ -217,10 +221,41 @@ export function detectLanguage(code: string): string | null {
 
   if (MARKUP.test(text)) return /<\?(php|=)/.test(text) ? 'php' : 'html'
 
-  const structure = text.replace(STRINGS, (_, kept) => kept ?? '""')
+  const structure = structureOf(text)
   const scores = Object.entries(SIGNALS).map(([id, signals]) => [id, score(structure, signals)] as const)
   const only = score(structure, TYPESCRIPT_ONLY)
   if (only) scores.push(['typescript', score(structure, JAVASCRIPT) + only])
   const [best, second] = scores.sort((a, b) => b[1] - a[1])
   return best[1] >= MIN_SCORE && best[1] > second[1] ? best[0] : null
+}
+
+// لغات لا يحمل ملفها اسم نوع، وما يبدو فيها كذلك جزء من مثال أو من script داخلها
+const NO_TYPES = new Set(['html', 'css', 'json', 'yaml', 'markdown', 'sql', 'shell'])
+const DEFAULT_STEMS: Record<string, string> = { html: 'index', css: 'styles', php: 'index', sql: 'script', csharp: 'Program' }
+
+// تعريف لا تصريح مسبق: class Foo; و struct Foo *p لا يُعرّفان شيئاً
+const TYPE = /^([ \t]*)(?:template\s*<[^>]*>\s*)?(?:(?:public|private|protected|internal|abstract|final|sealed|static|partial|open|data|export|default|declare|typedef|pub(?:\(\w+\))?)\s+)*(?:class|struct|type(?=\s+\w+\s+struct\b))\s+(?!extends\b)(\w+)\b(?![ \t]*[;*&])/gm
+const DEFAULT_EXPORT = /^export\s+default\s+(?:(?:async\s+)?(?:function\*?|class)\s+(?!extends\b)(\w+)|(\w+)\s*;?\s*$)/m
+// الحرف الكبير يميّز مكوّن React، والصغير يستثني ثوابت مثل MAX_SIZE
+const COMPONENT = /^([ \t]*)(?:export\s+)?(?:function|const)\s+([A-Z]\w*[a-z]\w*)\b(?=\s*[(<]|\s*=\s*(?:async\s*)?\()/gm
+
+// shortcut: الأخير بين الأقل مسافة بادئة، لأن التعريف يلي عادةً ما يستخدمه؛ يخطئ في ملف يضع الرئيسي أولاً، ويحتاج عندها تحليل الاستخدام
+const outermostLast = (code: string, pattern: RegExp) => {
+  const found = [...code.matchAll(pattern)]
+  const outer = Math.min(...found.map((match) => match[1].length))
+  return found.findLast((match) => match[1].length === outer)?.[2]
+}
+
+const primaryName = (id: string, code: string) => {
+  if (NO_TYPES.has(id)) return undefined
+  const structure = structureOf(code)
+  if (id !== 'javascript' && id !== 'typescript') return outermostLast(structure, TYPE)
+  const exported = DEFAULT_EXPORT.exec(structure)
+  return exported?.[1] ?? exported?.[2] ?? outermostLast(structure, TYPE) ?? outermostLast(structure, COMPONENT)
+}
+
+// اسم الملف الذي يناسب الكود: نوعه الرئيسي إن وُجد، وإلا الاسم المعتاد للغة
+export function fileNameFor(language: { id: string; ext: string }, code: string) {
+  if (language.id === 'java') return javaFileName(code) ?? 'Main.java'
+  return `${primaryName(language.id, code) ?? DEFAULT_STEMS[language.id] ?? 'main'}.${language.ext}`
 }

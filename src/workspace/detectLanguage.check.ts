@@ -1,7 +1,7 @@
 // فحوص التعرف على اللغة. أمثلة المحرر كلها عينة اختبار، وقصيرها الغامض مسموح أن يبقى بلا حكم، أما الحكم الخاطئ فلا. تشغيلها: npm test
 import assert from 'node:assert'
 import { LANGUAGES } from '../lib/languages.ts'
-import { detectLanguage } from './detectLanguage.ts'
+import { detectLanguage, fileNameFor } from './detectLanguage.ts'
 
 let right = 0
 let unsure = 0
@@ -87,5 +87,61 @@ const wrapped: [string, string][] = [
   ['markdown', '# Title\n\n\u0060\u0060\u0060python\nprint("x")\n\u0060\u0060\u0060\n'],
 ]
 for (const [expected, code] of wrapped) assert.equal(detectLanguage(code), expected, code)
+
+// اسم الملف: النوع الرئيسي، وإلا اسم اللغة المعتاد
+const nameOf = (id: string, code: string) => {
+  const language = LANGUAGES.find((l) => l.id === id)
+  assert.ok(language, id)
+  return fileNameFor(language, code)
+}
+const named: [string, string, string][] = [
+  ['cpp', 'class Calculator {\npublic:\n  int add();\n};\nint main() {}', 'Calculator.cpp'],
+  ['cpp', 'struct Node {\n  int v;\n};', 'Node.cpp'],
+  ['cpp', 'template <typename T> class Stack {\n};', 'Stack.cpp'],
+  ['cpp', 'class Account {\n};\nclass BankSystem {\n};\nint main() {}', 'BankSystem.cpp'],
+  ['cpp', 'class Outer {\n  class Inner {\n  };\n};', 'Outer.cpp'],
+  ['cpp', 'class Later;\nint main() {}', 'main.cpp'],
+  ['cpp', 'enum class Color { Red };\nint main() {}', 'main.cpp'],
+  ['cpp', '/* class Hidden {} */\n// class Gone {}\nint main() { const char* s = "class Fake {"; }', 'main.cpp'],
+  ['c', 'typedef struct Point {\n  int x;\n} Point;', 'Point.c'],
+  ['c', 'struct Node *head;\nint main(void) { return 0; }', 'main.c'],
+  ['java', 'public class BankSystem {\n}', 'BankSystem.java'],
+  ['java', 'int x;', 'Main.java'],
+  ['javascript', 'export default function App() {\n  return <div />;\n}', 'App.js'],
+  ['javascript', 'const App = () => <div />;\nexport default App;', 'App.js'],
+  ['javascript', 'export default class Store {}\nclass Helper {}', 'Store.js'],
+  ['javascript', 'export default function () {}', 'main.js'],
+  ['javascript', 'export default class extends Base {}', 'main.js'],
+  ['javascript', 'export default { a: 1 };', 'main.js'],
+  ['javascript', 'export default connect(App);', 'main.js'],
+  ['javascript', 'class Timer {}\nconsole.log(1);', 'Timer.js'],
+  ['javascript', 'function Header() { return <h1 />; }', 'Header.js'],
+  ['javascript', 'const Card = ({ title }) => <div>{title}</div>;', 'Card.js'],
+  ['javascript', 'const MAX_SIZE = (1 + 2);\nconst config = {};\nconsole.log(1);', 'main.js'],
+  ['typescript', 'export default function App(): void {}', 'App.ts'],
+  ['typescript', 'type Id = string;\ninterface User { id: Id }', 'main.ts'],
+  ['python', 'class Dog:\n    def bark(self):\n        class Inner:\n            pass', 'Dog.py'],
+  ['python', 'x = "class Fake:"\n# class Gone:\n"""\nclass Doc:\n"""\nprint(x)', 'main.py'],
+  ['csharp', 'namespace Bank\n{\n    class Account { }\n    class Program\n    {\n        class Nested { }\n    }\n}', 'Program.cs'],
+  ['csharp', 'namespace Bank\n{\n    public sealed class Vault\n    {\n    }\n}', 'Vault.cs'],
+  ['csharp', 'Console.WriteLine("x");', 'Program.cs'],
+  ['go', 'package main\ntype Node struct {\n\tv int\n}\ntype Id int', 'Node.go'],
+  ['go', 'package main\nfunc main() {}', 'main.go'],
+  ['rust', 'pub struct Point {\n    x: i32,\n}', 'Point.rs'],
+  ['rust', 'fn main() {}', 'main.rs'],
+  ['php', '<?php\nfinal class Cart {\n}', 'Cart.php'],
+  ['php', '<?php\necho 1;', 'index.php'],
+  ['kotlin', 'data class User(val id: Int)', 'User.kt'],
+  ['swift', 'final class Box {\n}', 'Box.swift'],
+  ['dart', 'abstract class Shape {\n}', 'Shape.dart'],
+  ['ruby', 'class Dog < Animal\nend', 'Dog.rb'],
+  ['html', '<script>\nclass Fake {}\n</script>', 'index.html'],
+  ['css', '.a { color: red; }', 'styles.css'],
+  ['sql', 'SELECT 1;', 'script.sql'],
+  ['markdown', '# T\n\n\u0060\u0060\u0060python\nclass Fake:\n    pass\n\u0060\u0060\u0060', 'main.md'],
+  ['yaml', 'type: class Fake', 'main.yml'],
+  ['shell', 'echo hi', 'main.sh'],
+]
+for (const [id, code, expected] of named) assert.equal(nameOf(id, code), expected, code)
 
 console.log(`language checks passed (${right} examples recognised, ${unsure} left undecided)`)
