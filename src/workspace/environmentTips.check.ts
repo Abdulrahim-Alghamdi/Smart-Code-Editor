@@ -1,5 +1,6 @@
 // فحوص نصائح بيئة التشغيل. الرسائل منسوخة من تشغيل فعلي على Pyodide و Wandbox والمتصفح. تشغيلها: npm test
 import assert from 'node:assert'
+import { workspaceCopy } from './copy.ts'
 import { environmentTip } from './environmentTips.ts'
 
 const tools = (language: string, text: string, level = 'error') => environmentTip(language, [{ level, text }])?.tools[0]
@@ -44,7 +45,13 @@ const covered: [string, string, string][] = [
   ['rust', "error[E0463]: can't find crate for `sdl2`", 'RustRover'],
   ['rust', 'error[E0433]: failed to resolve: use of undeclared crate or module `winit`', 'RustRover'],
 ]
-for (const [language, text, expected] of covered) assert.equal(tools(language, text), expected, text)
+for (const [language, text, expected] of covered) {
+  assert.equal(tools(language, text), expected, text)
+  // لكل نصيحة سبب باللغتين، والعربي عربي فعلاً
+  const reason = environmentTip(language, [{ level: 'error', text }])!.reason
+  assert.ok(workspaceCopy.en.environment.reasons[reason], reason)
+  assert.match(workspaceCopy.ar.environment.reasons[reason], /[\u0600-\u06FF]/, reason)
+}
 
 // أخطاء عادية يصلحها المستخدم بنفسه: نصيحة بتغيير المحرر هنا تضلله
 const ordinary: [string, string][] = [

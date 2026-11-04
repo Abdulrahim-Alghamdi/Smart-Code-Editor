@@ -117,8 +117,8 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
         title={g.open}
         className={`${labelButton} ms-auto shrink-0`}
       >
-        <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden="true">
-          <path d="M12 2c.9 5.5 4.5 9.1 10 10-5.5.9-9.1 4.5-10 10-.9-5.5-4.5-9.1-10-10 5.5-.9 9.1-4.5 10-10z" />
+        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16v4M17 18h4" />
         </svg>
         <span className="hidden whitespace-nowrap sm:inline">{g.open}</span>
       </button>
@@ -176,7 +176,6 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
                 {g.insert}
               </button>
             </div>
-            <p className="mt-2 text-center text-xs text-ink-2">{g.attribution}</p>
           </form>
         </dialog>
       )}

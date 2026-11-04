@@ -38,7 +38,7 @@ const copy = {
     steps: [
       { title: 'الصق الكود.', body: `أو اختر مثالاً جاهزاً من ${LANGUAGES.length} لغة.` },
       { title: 'اختر اللغة.', body: 'تلوين وتدقيق حسب لغة البرمجة.' },
-      { title: 'يحلل الذكاء الاصطناعي.', body: 'يكتشف Gemini الأخطاء النحوية والمنطقية.' },
+      { title: 'يحلل الذكاء الاصطناعي.', body: 'يقوم المساعد الذكي باكتشاف الأخطاء النحوية والمنطقية ويشرح الحل.' },
       { title: 'طبّق الإصلاح.', body: 'انسخ الشرح أو طبّق الكود المصحح بنقرة.' },
     ],
     plansTitle: 'حساب مجاني، فحص بلا حدود',
@@ -83,7 +83,7 @@ const copy = {
     steps: [
       { title: 'Paste your code.', body: `Or pick a ready example in ${LANGUAGES.length} languages.` },
       { title: 'Pick the language.', body: 'Highlighting and checks per language.' },
-      { title: 'AI reviews it.', body: 'Gemini finds syntax and logic errors.' },
+      { title: 'AI reviews it.', body: 'The AI Assistant detects syntax and logic errors and explains the solution.' },
       { title: 'Apply the fix.', body: 'Copy the explanation or apply the fix in one click.' },
     ],
     plansTitle: 'Free account. Unlimited reviews.',
