@@ -4,9 +4,11 @@
 import { ApiError, GoogleGenAI } from '@google/genai'
 import { createClient } from '@supabase/supabase-js'
 
-// shortcut: deprecated, and from 2026-12-01 Google routes it to gemini-3.5-flash-lite; change this constant to move off it
-const MODEL = 'gemini-2.5-flash'
-// Under maxDuration in vercel.json, so the browser gets our error and not Vercel's timeout page
+// Tried in order: if one is busy, the next one gets the request
+const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-lite-latest']
+// Gemini's "overloaded" and "rate limited" answers; any other error would fail the same way on the next model
+const BUSY_STATUSES = [429, 503]
+// Shared by all the attempts and under maxDuration in vercel.json, so the browser gets our error and not Vercel's timeout page
 const TIMEOUT_MS = 55_000
 // Caps what one request can send to Gemini on your bill
 const MAX_PROMPT_CHARS = 4_000
@@ -29,9 +31,22 @@ export const parseRequest = (raw: unknown): { prompt: string; language: string }
 // The system prompt asks for raw code, but a model can still wrap it in a fence, which would land in the user's file
 export const stripFences = (text: string) => (/^\s*```[^\n]*\n([\s\S]*?)\n?```\s*$/.exec(text)?.[1] ?? text).trim()
 
+// The first model that answers wins; null means every model is busy
+export const firstFreeModel = async <T>(call: (model: string) => Promise<T>) => {
+  for (const model of MODELS) {
+    try {
+      return await call(model)
+    } catch (err) {
+      if (!(err instanceof ApiError) || !BUSY_STATUSES.includes(err.status)) throw err
+      console.warn(`${model} is busy (${err.status})`)
+    }
+  }
+  return null
+}
+
 export default {
   async fetch(req: Request) {
-    // error keys match the client's message keys: request, badResponse, network
+    // error keys match the client's message keys: request, badResponse, network, busy
     const reply = (status: number, body: unknown) => Response.json(body, { status })
 
     if (req.method !== 'POST') return reply(405, { error: 'request', detail: 'POST only' })
@@ -48,12 +63,13 @@ export default {
     const input = parseRequest(await req.json().catch(() => null))
     if (!input) return reply(400, { error: 'request', detail: `Send a prompt of ${MAX_PROMPT_CHARS} characters at most and a language` })
 
+    const ai = new GoogleGenAI({ apiKey })
+    const abortSignal = AbortSignal.timeout(TIMEOUT_MS)
     try {
-      const response = await new GoogleGenAI({ apiKey }).models.generateContent({
-        model: MODEL,
-        contents: input.prompt,
-        config: { systemInstruction: systemPrompt(input.language), abortSignal: AbortSignal.timeout(TIMEOUT_MS) },
-      })
+      const response = await firstFreeModel((model) =>
+        ai.models.generateContent({ model, contents: input.prompt, config: { systemInstruction: systemPrompt(input.language), abortSignal } })
+      )
+      if (!response) return reply(503, { error: 'busy', detail: '' })
       const code = stripFences(response.text ?? '')
       return code ? reply(200, { code }) : reply(502, { error: 'badResponse' })
     } catch (err) {

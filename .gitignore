@@ -30,3 +30,6 @@ dist-ssr
 # Security scan workspace and Strix reports
 scan_target/
 strix_runs/
+
+.vercel
+.env*
