@@ -10,6 +10,8 @@ interface PyProxy {
 interface Pyodide {
   setStdout(handler: { batched: (text: string) => void }): void
   setStderr(handler: { batched: (text: string) => void }): void
+  setStdin(handler: { stdin: () => string | undefined }): void
+  runPython(code: string): unknown
   loadPackagesFromImports(code: string): Promise<unknown>
   runPythonAsync(code: string, options: { globals: PyProxy; filename: string }): Promise<unknown>
   globals: { get(name: string): () => PyProxy }
@@ -56,8 +58,8 @@ const load = async (): Promise<Pyodide> => {
 
 let ready: Promise<Pyodide> | null = null
 
-self.onmessage = async (event: MessageEvent<{ code: string; filename: string }>) => {
-  const { code, filename } = event.data
+self.onmessage = async (event: MessageEvent<{ code: string; filename: string; stdin: string }>) => {
+  const { code, filename, stdin } = event.data
   let pyodide: Pyodide
   try {
     pyodide = await (ready ??= load())
@@ -69,16 +71,29 @@ self.onmessage = async (event: MessageEvent<{ code: string; filename: string }>)
   }
   post({ type: 'ready' })
 
+  // كل input() يأخذ سطراً، وبعد آخرها undefined تعني نهاية المدخلات (EOFError في بايثون)
+  const inputLines = stdin ? stdin.split('\n') : []
+  pyodide.setStdin({ stdin: () => inputLines.shift() })
+
   // متغيرات كل تشغيل في قاموس جديد، فلا يبقى شيء من التشغيل السابق
   const globals = pyodide.globals.get('dict')()
+  // نص بلا سطر جديد (سؤال input مثلاً) يبقى معلقاً في Pyodide، ودون دفعه يظهر في أول التشغيل التالي
+  const finish = () => {
+    try {
+      pyodide.runPython('import os, sys; sys.stdout.flush(); sys.stderr.flush(); os.fsync(1); os.fsync(2)')
+    } catch {
+      // كود المستخدم قد يغلق sys.stdout؛ لا يمنع ذلك إنهاء التشغيل
+    }
+    flush()
+  }
   try {
     // يحمّل حزم Pyodide التي يستوردها الكود (numpy مثلاً) قبل التشغيل
     await pyodide.loadPackagesFromImports(code)
     await pyodide.runPythonAsync(code, { globals, filename })
-    flush()
+    finish()
     post({ type: 'done' })
   } catch (err) {
-    flush()
+    finish()
     const message = err instanceof Error ? err.message : String(err)
     // يحذف من التتبع أسطر Pyodide الداخلية ويبقي أسطر ملف المستخدم والخطأ نفسه
     const own = message.indexOf(`  File "${filename}"`)

@@ -32,7 +32,7 @@ interface Handlers {
   onLine: (level: 'log' | 'error', text: string) => void
 }
 
-export function runInWorker(engine: Engine, code: string, filename: string, { onReady, onLine }: Handlers) {
+export function runInWorker(engine: Engine, code: string, filename: string, stdin: string, { onReady, onLine }: Handlers) {
   const current = workers.get(engine) ?? create(engine)
   workers.set(engine, current)
   let finished = false
@@ -71,7 +71,7 @@ export function runInWorker(engine: Engine, code: string, filename: string, { on
   }
 
   current.addEventListener('message', receive)
-  current.postMessage({ code, filename })
+  current.postMessage({ code, filename, stdin })
   // stop عند إغلاق اللوحة أو "تشغيل من جديد" أثناء العمل؛ لا يفعل شيئاً بعد انتهاء التشغيل
   return {
     done,

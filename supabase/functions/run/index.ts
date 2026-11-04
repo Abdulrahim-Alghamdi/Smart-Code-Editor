@@ -31,7 +31,7 @@ const ANSWER_MARGIN_MS = 1_500
 const RETRY_DELAY_MS = 1_200
 const MIN_RETRY_TIME_MS = 3_000
 
-// Results by SHA-256 of language + file name + code, kept while this function instance stays warm.
+// Results by SHA-256 of language + file name + code + input, kept while this function instance stays warm.
 // Many users run the same examples, so this saves Wandbox calls (and its per-IP rate limit) across users.
 // shortcut: per instance and lost on cold start; move to a Supabase table if hit rates matter
 const CACHE_LIMIT = 200
@@ -68,13 +68,13 @@ const tidy = (text: string | undefined, filename: string) =>
 
 // One call to Wandbox. Raw server errors (HTML error pages, "Too many requests", container failures) become an Attempt
 // kind here, so none of them reach the user as-is
-async function compile(compiler: string, code: string, timeoutMs: number): Promise<Attempt> {
+async function compile(compiler: string, code: string, stdin: string, timeoutMs: number): Promise<Attempt> {
   try {
     const res = await fetch('https://wandbox.org/api/compile.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // save: false keeps the code off Wandbox's public permalinks
-      body: JSON.stringify({ compiler, code, stdin: '', save: false }),
+      body: JSON.stringify({ compiler, code, stdin, save: false }),
       signal: AbortSignal.timeout(timeoutMs),
     })
     const body = await res.text()
@@ -116,17 +116,18 @@ Deno.serve(async (req) => {
   if (!claims?.sub || claims.role !== 'authenticated' || claims.is_anonymous) return reply(401, { error: 'request', detail: 'Sign in required' })
 
   // The body comes from the browser, so check it before sending anything on
-  const { language, code, name, fresh } = (body ?? {}) as Record<string, unknown>
+  const { language, code, name, fresh, stdin = '' } = (body ?? {}) as Record<string, unknown>
   const compilers = typeof language === 'string' && Object.hasOwn(COMPILERS, language) ? COMPILERS[language] : undefined
   if (!compilers || typeof language !== 'string' || typeof code !== 'string' || !code.trim() || code.length > MAX_CHARS) {
     return reply(400, { error: 'request', detail: `Send a supported language and 1-${MAX_CHARS} characters of code` })
   }
+  if (typeof stdin !== 'string' || stdin.length > MAX_CHARS) return reply(400, { error: 'request', detail: `Send ${MAX_CHARS} characters of input at most` })
 
   // Only used to label error messages; anything unusual falls back to Wandbox's own prog.<ext>
   const filename = typeof name === 'string' && /^[\w.-]{1,100}$/.test(name) ? name : 'prog.$1'
 
   // fresh: the user asked to run it again for real ("Run fresh"), e.g. a program using random numbers
-  const key = await hash(`${language}\0${filename}\0${code}`)
+  const key = await hash(`${language}\0${filename}\0${code}\0${stdin}`)
   const hit = fresh === true ? undefined : cache.get(key)
   if (hit) return reply(200, { ...(hit as object), cached: true })
 
@@ -138,7 +139,7 @@ Deno.serve(async (req) => {
   let attempt: Attempt
   for (;;) {
     // AbortSignal.timeout needs a whole number of milliseconds
-    attempt = await compile(compilers[compilerIndex], source, Math.max(1, Math.floor(deadline - performance.now())))
+    attempt = await compile(compilers[compilerIndex], source, stdin, Math.max(1, Math.floor(deadline - performance.now())))
     if (attempt.ok || attempt.kind === 'request' || attempt.kind === 'timeout') break
     // container down: switch to the fallback compiler straight away
     if (attempt.kind === 'unavailable' && compilerIndex + 1 < compilers.length) {

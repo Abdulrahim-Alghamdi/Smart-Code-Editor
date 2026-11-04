@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
-import { iconButton } from '@/lib/ui'
+import { iconButton, input, outlineButton } from '@/lib/ui'
 import { LANGUAGES } from '@/lib/languages'
 import { supabase } from '@/lib/supabase'
 import type { WorkspaceCopy } from './copy'
@@ -53,6 +53,9 @@ interface Props {
   name: string
   language: string
   code: string
+  // ما يقرأه البرنامج من المدخلات القياسية (Scanner أو input)؛ التشغيل غير تفاعلي، فتُكتب قبله
+  stdin: string
+  onStdin: (value: string) => void
   // true: يتجاهل النتيجة المحفوظة ويشغّل الكود فعلاً ("تشغيل جديد")
   fresh: boolean
   onRerun: () => void
@@ -68,7 +71,7 @@ const RETRY_DELAY_MS = 1_200
 
 // كود المستخدم يعمل في iframe معزول (allow-scripts بلا allow-same-origin): لا يصل لجلسة الحساب ولا لتخزين الموقع.
 // shortcut: حلقة لا تنتهي في JavaScript قد تجمّد التبويب في متصفح لا يعزل iframe في عملية مستقلة؛ انقله لـ Worker إن ظهرت شكاوى
-export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, onClose, copy }: Props) {
+export function OutputPanel({ name, language, code, stdin, onStdin, fresh, onRerun, onRunFresh, onClose, copy }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [lines, setLines] = useState<Line[]>([])
   const html = language === 'html'
@@ -115,7 +118,8 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
 
     void (async () => {
       // الكود نفسه شُغّل من قبل: النتيجة المحفوظة فوراً، بلا تحميل محرك ولا طلب للخادم
-      const key = await runKey(language, name, code)
+      // المدخلات جزء من المفتاح: البرنامج نفسه بمدخلات أخرى نتيجته مختلفة
+      const key = await runKey(language, name, `${code}\0${stdin}`)
       if (!fresh) {
         const hit = await getCachedRun(key)
         if (!alive) return
@@ -129,7 +133,7 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
       if (engine) {
         if (!engineLoaded(engine)) setPhase('loading')
         let started = 0
-        const run = runInWorker(engine, code, name, {
+        const run = runInWorker(engine, code, name, stdin, {
           onReady: () => {
             started = performance.now()
             setPhase('running')
@@ -153,7 +157,7 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
       stop = () => controller.abort()
       const call = () =>
         supabase.functions.invoke<RunResult>('run', {
-          body: { language, code, name, fresh },
+          body: { language, code, name, fresh, stdin },
           timeout: Math.max(1, Math.floor(deadline - performance.now())),
           signal: controller.signal,
         })
@@ -232,6 +236,25 @@ export function OutputPanel({ name, language, code, fresh, onRerun, onRunFresh, 
           </button>
         </div>
       </div>
+      {(server || language === 'python') && (
+        <div className="flex items-end gap-2 border-b border-line p-2">
+          <label className="min-w-0 flex-1 text-xs text-ink-2">
+            {copy.programInput}
+            <textarea
+              dir="auto"
+              rows={2}
+              data-lenis-prevent
+              defaultValue={stdin}
+              maxLength={100_000}
+              onChange={(e) => onStdin(e.target.value)}
+              className={`${input} block resize-none font-mono text-xs`}
+            />
+          </label>
+          <button type="button" onClick={onRerun} className={`${outlineButton} shrink-0`}>
+            {copy.rerun}
+          </button>
+        </div>
+      )}
       {!server && !engine && (
         <iframe
           ref={frameRef}

@@ -347,7 +347,9 @@ function App() {
   const [editorSettings, setEditorSettings] = useStored(KEYS.editor, DEFAULT_EDITOR_SETTINGS, parseEditorSettings)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   // لقطة الكود وقت الضغط على "المخرجات"؛ run يتغير مع كل تشغيل فيُعاد تحميل الإطار وتُمسح المخرجات السابقة
-  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; fresh: boolean; run: number } | null>(null)
+  const [output, setOutput] = useState<{ fileId: string; name: string; language: string; code: string; stdin: string; fresh: boolean; run: number } | null>(null)
+  // مدخلات البرنامج لكل ملف؛ ref لا state حتى لا تعيد الكتابة فيها رسم المحرر
+  const programInput = useRef<Record<string, string>>({})
   // نسخ الملف النشط المحفوظة على هذا الجهاز؛ النافذة مفتوحة ما دامت ليست null
   const [versions, setVersions] = useState<Snapshot[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
@@ -386,7 +388,7 @@ function App() {
   // fresh: يتجاهل النتيجة المحفوظة لهذا الكود ويشغّله فعلاً
   const runOutput = (fresh = false) => {
     if (SERVER_RUN.includes(language) && needsAccount()) return
-    setOutput({ fileId: active.id, name: active.name, language, code, fresh, run: (output?.run ?? 0) + 1 })
+    setOutput({ fileId: active.id, name: active.name, language, code, stdin: programInput.current[active.id] ?? '', fresh, run: (output?.run ?? 0) + 1 })
   }
   const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
   // تتحول واجهة البداية إلى مساحة عمل بعمودين عند بدء الفحص
@@ -1142,6 +1144,10 @@ function App() {
                     name={output.name}
                     language={output.language}
                     code={output.code}
+                    stdin={output.stdin}
+                    onStdin={(value) => {
+                      programInput.current[output.fileId] = value
+                    }}
                     fresh={output.fresh}
                     onRerun={() => runOutput()}
                     onRunFresh={() => runOutput(true)}
