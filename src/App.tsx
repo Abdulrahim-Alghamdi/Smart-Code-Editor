@@ -11,6 +11,7 @@ import { KEYS } from '@/services/storage'
 import { useStored } from '@/services/useStored'
 import { AIGenerator } from '@/workspace/AIGenerator'
 import { workspaceCopy } from '@/workspace/copy'
+import { detectLanguage } from '@/workspace/detectLanguage'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
@@ -30,6 +31,7 @@ import { supabase } from '@/lib/supabase'
 import { useFiles } from '@/workspace/useFiles'
 import { useProjects } from '@/workspace/useProjects'
 import { useAuth } from '@/account/useAuth'
+import { extraPublics, javaFileName } from '../supabase/functions/_shared/javaSource'
 
 type Lang = 'ar' | 'en'
 type Tab = 'bugs' | 'fix' | 'optimize'
@@ -698,14 +700,14 @@ function App() {
   const setCode = (content: string) => updateFile(active.id, { content })
 
   // اختيار لغة يغيّر امتداد الملف النشط، ومع exampleIndex يحمّل أحد أمثلتها بدل الكود
-  const selectLanguage = (id: string, exampleIndex?: number) => {
+  const selectLanguage = (id: string, exampleIndex?: number, fileName?: string) => {
     const next = LANGUAGES.find((l) => l.id === id)
     if (!next) return
     if (next.id !== language) closeForLanguageChange()
     const taken = files.filter((f) => f.id !== active.id).map((f) => f.name)
     updateFile(active.id, {
       language: next.id,
-      name: uniqueName(withExt(active.name, next.ext), taken),
+      name: uniqueName(fileName ?? withExt(active.name, next.ext), taken),
       ...(exampleIndex !== undefined && { content: next.examples[exampleIndex] }),
     })
   }
@@ -724,6 +726,39 @@ function App() {
     for (const model of monacoRef.current?.editor.getModels() ?? []) model.updateOptions({ tabSize: editorSettings.tabSize, insertSpaces: true })
   }
   useEffect(applyTabSize, [editorSettings.tabSize, active.id])
+
+  // اللصق يحدد اللغة إذا صار هو الملف كله فقط، فمقتطف داخل ملف قائم لا يغيّر لغته. أما جافا فتُضبط بعد أي لصق لأن قواعدها تخص الملف كله
+  const afterPaste = (pasted: string) => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+    const text = model.getValue()
+    const detected = pasted.trim() === text.trim() ? detectLanguage(text) : null
+    const next = detected ?? language
+    const java = next === 'java'
+    const extra = java ? extraPublics(text) : []
+    if (extra.length) {
+      const toRange = (offset: number) => model.getPositionAt(offset)
+      editor.pushUndoStop()
+      editor.executeEdits(
+        'paste',
+        extra.map(([start, end]) => {
+          const [from, to] = [toRange(start), toRange(end)]
+          return { range: { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }, text: '' }
+        })
+      )
+      editor.pushUndoStop()
+    }
+    const fileName = java ? (javaFileName(text) ?? (detected ? 'Main.java' : undefined)) : undefined
+    if (next === language && !fileName) return
+    selectLanguage(next, undefined, fileName)
+    const notes = [
+      next !== language && wc.toasts.languageDetected(LANGUAGES.find((l) => l.id === next)?.label ?? next),
+      fileName && fileName !== active.name && wc.toasts.fileRenamed(fileName),
+      extra.length > 0 && wc.toasts.publicRemoved(extra.length),
+    ].filter(Boolean)
+    if (notes.length) notify(notes.join(' · '), 'success')
+  }
 
   const newFile = () => {
     const file = { id: newId(), name: uniqueName(`untitled.${current.ext}`, files.map((f) => f.name)), language, content: '' }
@@ -890,6 +925,10 @@ function App() {
   }
 
   // اختصارات لوحة المفاتيح. مرحلة الالتقاط تسبق Monaco، فلا ينفّذ أمره الافتراضي (Ctrl+Enter عنده يضيف سطراً)
+  const pasteAction = useRef(afterPaste)
+  useEffect(() => {
+    pasteAction.current = afterPaste
+  })
   const shortcutActions = useRef({ analyze: loading ? stopAnalyze : analyzeCode, save: () => code && exportFile() })
   useEffect(() => {
     shortcutActions.current = { analyze: loading ? stopAnalyze : analyzeCode, save: () => code && exportFile() }
@@ -1106,6 +1145,7 @@ function App() {
                       editorRef.current = editor
                       monacoRef.current = monaco
                       applyTabSize()
+                      editor.onDidPaste(({ range }) => pasteAction.current(editor.getModel()?.getValueInRange(range) ?? ''))
                     }}
                     theme="vs-dark"
                     loading={

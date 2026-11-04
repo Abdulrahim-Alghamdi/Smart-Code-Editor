@@ -2,6 +2,7 @@
 // Signed-in users only, like the AI review: Wandbox rate-limits by IP, and every user's runs share this function's IP.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders, forbidden } from '../_shared/cors.ts'
+import { forWandbox } from '../_shared/javaSource.ts'
 
 // The editor's language ids → Wandbox compilers, primary first, then a fallback used when the primary's container is down.
 // Every name here ran a hello program on 2026-10-31 (GET https://wandbox.org/api/list.json, then POST compile.json).
@@ -54,10 +55,7 @@ interface WandboxResult {
 // (try the fallback compiler). timeout: out of time. request: Wandbox refused the request itself.
 type Attempt = { ok: true; result: WandboxResult } | { ok: false; kind: 'busy' | 'unavailable' | 'timeout' | 'request'; detail?: string }
 
-// Wandbox saves Java as prog.java, so a top-level `public class Main` fails to compile.
-// Package-private classes compile under any file name and Wandbox still runs the one with main()
-const prepare = (language: string, code: string) =>
-  language === 'java' ? code.replace(/^(\s*)public\s+((?:(?:final|abstract|sealed|non-sealed)\s+)*(?:class|interface|enum|record)\s)/gm, '$1$2') : code
+const prepare = (language: string, code: string) => (language === 'java' ? forWandbox(code) : code)
 
 // Wandbox's messages point at its own server: Go adds a "# _/home/wandbox" header line, and paths read
 // /home/wandbox/prog.go or ./prog.go. Show them as the user's file instead, e.g. "main.go:6:31: syntax error"
