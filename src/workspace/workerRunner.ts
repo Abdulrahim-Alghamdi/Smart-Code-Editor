@@ -12,7 +12,7 @@ export type WorkerMessage =
   | ({ type: 'line' } & Line)
   | { type: 'lines'; lines: Line[] }
   | { type: 'ask' }
-  | { type: 'done'; error?: string; loadFailed?: boolean }
+  | { type: 'done'; error?: string; loadFailed?: boolean; fatal?: boolean }
 
 // Worker واحد لكل محرك: يُحمَّل فيه مرة ويبقى للتشغيلات التالية، ويُعاد إنشاؤه فقط بعد إيقاف قسري
 const workers = new Map<Engine, Worker>()
@@ -70,7 +70,9 @@ export function runInWorker(engine: Engine, code: string, filename: string, stdi
       onAsk()
     } else {
       if (message.error) onLine('error', message.error)
-      finish(message.loadFailed ? 'loadFailed' : 'done')
+      // المحرك مات مع البرنامج، فالتشغيل التالي يحتاج Worker جديداً
+      if (message.fatal) kill('done')
+      else finish(message.loadFailed ? 'loadFailed' : 'done')
     }
   }
 

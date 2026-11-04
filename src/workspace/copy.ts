@@ -6,7 +6,8 @@ export const workspaceCopy = {
     shortcutNames: { analyze: 'فحص الكود بالذكاء الاصطناعي', save: 'حفظ الملف على جهازك', format: 'تنسيق الكود' },
     formatNote: 'التنسيق متاح لـ JavaScript و TypeScript و JSON و HTML و CSS.',
     generator: {
-      open: 'توليد كود',
+      open: 'اسأل Gemini',
+      attribution: 'مدعوم من Gemini API',
       prompt: (language: string) => `صف الكود الذي تريده بلغة ⁦${language}⁩`,
       insert: 'إدراج عند المؤشر',
       replace: 'استبدال الملف',
@@ -96,7 +97,8 @@ export const workspaceCopy = {
     shortcutNames: { analyze: 'Review code with AI', save: 'Save the file to your device', format: 'Format code' },
     formatNote: 'Formatting works for JavaScript, TypeScript, JSON, HTML and CSS.',
     generator: {
-      open: 'Generate code',
+      open: 'Ask Gemini',
+      attribution: 'Powered by Gemini API',
       prompt: (language: string) => `Describe the ${language} code you want`,
       insert: 'Insert at cursor',
       replace: 'Replace file',

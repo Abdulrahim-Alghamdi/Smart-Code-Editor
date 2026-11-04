@@ -95,6 +95,22 @@ const load = async (): Promise<Pyodide> => {
 }
 
 let ready: Promise<Pyodide> | null = null
+let current: Pyodide | null = null
+
+// خطأ قاتل داخل WebAssembly (pygame.init يطلب screen غير الموجود في Worker) يتجاوز catch أدناه ولا يصل done أبداً، فيبقى
+// التشغيل معلقاً. runPython يميّزه عن خطأ عابر في كود المستخدم: المحرك الميت وحده يرفض كل تشغيل
+const crash = (reason: unknown) => {
+  if (!current) return
+  try {
+    current.runPython('0')
+  } catch {
+    current = null
+    flush()
+    post({ type: 'done', error: String(reason), fatal: true })
+  }
+}
+self.addEventListener('error', (event) => crash(event.message))
+self.addEventListener('unhandledrejection', (event) => crash(event.reason))
 
 self.onmessage = async (event: MessageEvent<{ answer: string | null } | { code: string; filename: string; stdin: string }>) => {
   if ('answer' in event.data) return answer?.(event.data.answer ?? undefined)
@@ -128,6 +144,7 @@ self.onmessage = async (event: MessageEvent<{ answer: string | null } | { code: 
   try {
     // يحمّل حزم Pyodide التي يستوردها الكود (numpy مثلاً) قبل التشغيل
     await pyodide.loadPackagesFromImports(code)
+    current = pyodide
     await pyodide.runPythonAsync(code, { globals, filename })
     finish()
     post({ type: 'done' })
@@ -138,6 +155,7 @@ self.onmessage = async (event: MessageEvent<{ answer: string | null } | { code: 
     const own = message.indexOf(`  File "${filename}"`)
     post({ type: 'done', error: own > 0 ? `Traceback (most recent call last):\n${message.slice(own)}` : message })
   } finally {
+    current = null
     globals.destroy()
   }
 }

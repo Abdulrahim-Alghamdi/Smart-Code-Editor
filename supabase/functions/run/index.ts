@@ -47,6 +47,7 @@ interface WandboxResult {
   status?: string
   signal?: string
   compiler_error?: string
+  compiler_output?: string
   program_output?: string
   program_error?: string
 }
@@ -159,13 +160,15 @@ Deno.serve(async (req) => {
   const exit = Number(r.status ?? 0)
   // 137 is SIGKILL: Wandbox stopped the program, so its partial output isn't a result to keep
   const killed = exit === 137
+  // tsc reports its errors on stdout, so without this a type error shows only as an exit code
+  const compileError = r.compiler_error || (exit !== 0 ? r.compiler_output : '')
   const result = {
     stdout: r.program_output ?? '',
     stderr: tidy(r.program_error, filename),
-    compileOutput: tidy(r.compiler_error, filename),
+    compileOutput: tidy(compileError, filename),
     message: r.signal ? `Signal: ${r.signal}` : '',
     // null when the program exited normally; otherwise the reason, shown to the user
-    status: r.compiler_error && !r.program_output && !r.program_error && exit !== 0 ? 'Compilation Error' : killed ? 'Stopped by the run server (time or memory limit)' : exit !== 0 ? `Exit code ${exit}` : null,
+    status: compileError && !r.program_output && !r.program_error && exit !== 0 ? 'Compilation Error' : killed ? 'Stopped by the run server (time or memory limit)' : exit !== 0 ? `Exit code ${exit}` : null,
     // Wandbox doesn't report time or memory, so this is the round trip, compile and retries included
     time: ((performance.now() - started) / 1000).toFixed(2),
     memory: null,

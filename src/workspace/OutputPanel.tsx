@@ -4,6 +4,7 @@ import { iconButton, input, labelButton, outlineButton } from '@/lib/ui'
 import { LANGUAGES } from '@/lib/languages'
 import { supabase } from '@/lib/supabase'
 import type { WorkspaceCopy } from './copy'
+import { environmentTip } from './environmentTips'
 import { inputMode, MISSING_INPUT, prepareInput, RUN_LIMIT_MS, SERVER_RUN } from './run'
 import { getCachedRun, putCachedRun, runKey, type Line } from './runCache'
 import { engineLoaded, runInWorker, type Engine } from './workerRunner'
@@ -295,6 +296,8 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputs])
 
+  const tip = environmentTip(language, lines)
+
   const status =
     phase === 'loading'
       ? copy.engineLoading[engine ?? 'python']
@@ -388,6 +391,20 @@ export function OutputPanel({ name, language, code, stdin, onStdin, waiting, fre
             lines.length === 0 && !asking && !running && <li className="text-ink-2">{server || engine ? copy.outputNothing : copy.outputEmpty}</li>
           )}
         </ol>
+      )}
+      {tip && (
+        <div role="status" dir="ltr" lang="en" className="border-t border-line px-3 py-2 text-xs">
+          <p className="flex items-center gap-1.5 font-medium text-ink">
+            <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-amber-300" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" />
+            </svg>
+            Run this on your computer
+          </p>
+          <p className="mt-1 text-ink-2">{tip.why}</p>
+          <p className="mt-1 text-ink-2">
+            Recommended: <span className="font-medium text-ink">{tip.tools.join(', ')}</span>
+          </p>
+        </div>
       )}
       {asking && (
         <div className="border-t border-line p-2">
