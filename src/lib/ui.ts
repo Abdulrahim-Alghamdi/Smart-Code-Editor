@@ -1,6 +1,9 @@
 // أنماط الأزرار والحقول المشتركة بين المحرر وصفحة الحساب
 export const iconButton =
   'grid size-8 place-items-center rounded-lg text-ink-2 transition-colors hover:bg-surface hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent'
+// زر بأيقونة ونص، للأفعال التي لا تكفي أيقونتها وحدها
+export const labelButton =
+  'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs text-ink-2 transition-colors hover:bg-surface hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent'
 export const outlineButton = 'h-9 rounded-lg border border-line-strong px-3 text-sm text-ink transition-colors hover:bg-surface disabled:opacity-40 disabled:hover:bg-transparent'
 export const accentButton = 'h-9 rounded-lg bg-accent px-3 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40 disabled:hover:bg-accent'
 // زر الحذف بلون تحذيري صريح، مختلف عن زر الإجراء البرتقالي العادي

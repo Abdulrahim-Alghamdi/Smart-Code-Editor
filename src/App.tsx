@@ -6,9 +6,10 @@ import LandingSections from '@/components/LandingSections'
 import SplitText from '@/components/SplitText'
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap'
 import { LANGUAGES } from '@/lib/languages'
-import { accentButton, iconButton, input, outlineButton } from '@/lib/ui'
+import { accentButton, iconButton, input, labelButton, outlineButton } from '@/lib/ui'
 import { KEYS } from '@/services/storage'
 import { useStored } from '@/services/useStored'
+import { AIGenerator } from '@/workspace/AIGenerator'
 import { workspaceCopy } from '@/workspace/copy'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
 import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
@@ -332,9 +333,6 @@ const parseReview = (text: string): Review | null => {
   }
 }
 
-// زر بأيقونة ونص، للأفعال التي لا تكفي أيقونتها وحدها
-const labelButton =
-  'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs text-ink-2 transition-colors hover:bg-surface hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent'
 const chip = 'h-8 rounded-md bg-surface-2 px-2.5 text-[13px] text-ink transition-colors hover:bg-line'
 
 function App() {
@@ -436,6 +434,15 @@ function App() {
     if (user) return false
     openAuth('signup', 'feature')
     return true
+  }
+
+  // 401: الرمز انتهى أو أُلغيت جلسته على الخادم. نجدده، وإن تعذّر التجديد فالجلسة انتهت فعلاً: خروج ثم دخول من جديد
+  const renewSession = async () => {
+    const { error } = await supabase.auth.refreshSession()
+    if (!error) return true
+    await auth.signOut()
+    openAuth('signin', 'session')
+    return false
   }
 
   const switchAuth = (mode: AuthMode) => {
@@ -542,8 +549,8 @@ function App() {
     })
 
   // يثبّت المحتوى الحالي نسخةً في السجل قبل أي فعل يستبدله (استعادة، مسح، مثال لغة)، فيمكن الرجوع إليه
-  const keepVersion = () =>
-    localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content: active.content }, true).catch(console.error)
+  const keepVersion = (content = active.content) =>
+    localDb.addSnapshot({ id: active.id, name: active.name, language: active.language, content }, true).catch(console.error)
 
   const clearEditor = async () => {
     if (!(await confirm({ ...wc.confirms.clearEditor(active.name), cancel: wc.cancel, danger: true }))) return
@@ -849,14 +856,8 @@ function App() {
       let { data, error } = await invoke()
       // أُوقف الفحص أثناء الانتظار: لا رسالة خطأ ولا نتيجة
       if (controller.signal.aborted) return
-      // 401: الرمز انتهى أو أُلغيت جلسته على الخادم. نجدده ونعيد مرة، وإن تعذّر التجديد فالجلسة انتهت فعلاً: خروج ثم دخول من جديد
       if (error instanceof FunctionsHttpError && error.context.status === 401) {
-        const { error: refreshError } = await supabase.auth.refreshSession()
-        if (refreshError) {
-          await auth.signOut()
-          openAuth('signin', 'session')
-          return
-        }
+        if (!(await renewSession())) return
         ;({ data, error } = await invoke())
         if (controller.signal.aborted) return
       }
@@ -973,7 +974,7 @@ function App() {
 
             <SplitLayout resizeLabel={wc.resizePanels} className={`transition-[max-width] duration-500 ${panelOpen ? 'max-w-6xl' : 'max-w-[740px]'}`}>
               {/* صندوق المحرر بتصميم صندوق الإدخال */}
-              <div className="flex flex-col overflow-hidden rounded-2xl border border-accent-soft bg-surface-2 shadow-sm">
+              <div className="relative flex flex-col overflow-hidden rounded-2xl border border-accent-soft bg-surface-2 shadow-sm">
                 {/* شريط أوامر الملفات فوق التبويبات؛ LTR مثل التبويبات والمحرر حتى يبقى على اليسار وبالترتيب نفسه في العربية */}
                 <div dir="ltr" className="flex items-center gap-1 px-2 pt-2">
                   <input
@@ -1018,6 +1019,14 @@ function App() {
                     </svg>
                     <span className="hidden sm:inline">{wc.versions}</span>
                   </button>
+                  <AIGenerator
+                    editorRef={editorRef}
+                    language={current.label}
+                    needsAccount={needsAccount}
+                    renewSession={renewSession}
+                    keepVersion={keepVersion}
+                    copy={wc}
+                  />
                 </div>
 
                 {/* تبويبات ملفات المشروع: تبديل، إعادة تسمية (نقر مزدوج أو F2) وإغلاق */}

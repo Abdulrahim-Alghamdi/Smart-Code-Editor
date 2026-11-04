@@ -88,7 +88,15 @@ In Vercel, open **Project → Settings → Environment Variables** and add these
 | `VITE_SUPABASE_URL` | `https://hyztzllvefbsdbqvqivs.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | the **anon / publishable** key from Supabase → Project Settings → API |
 
-Never add the Gemini key or the service-role key here. Any `VITE_` variable is bundled into the public JavaScript.
+For the AI code generator (`api/generate.ts`), also add this one. Keep it out of the browser bundle by never giving it a `VITE_` prefix:
+
+| Name | Value |
+|---|---|
+| `GEMINI_API_KEY` | the same key as step 2, or a separate one to track this feature's usage |
+
+Never add the service-role key here, and never add any secret under a `VITE_` name. Any `VITE_` variable is bundled into the public JavaScript.
+
+`npm run dev` doesn't serve `/api`. To try the generator locally, put `GEMINI_API_KEY` in `.env` and run `npx vercel dev`.
 
 Also delete the leftover `VITE_GEMINI_API_KEY` line from your local `.env`. The app no longer reads it, and the name means it would be published if any code ever did.
 
