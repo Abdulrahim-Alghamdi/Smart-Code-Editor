@@ -8,6 +8,10 @@ export const workspaceCopy = {
     generator: {
       open: 'المساعد الذكي',
       prompt: (language: string) => `صف الكود الذي تريده بلغة ⁦${language}⁩`,
+      intro: (language: string) => `صف ما تريده بكلماتك، ويكتب الذكاء الاصطناعي الكود بلغة ⁦${language}⁩ في ملفك.`,
+      examplesLabel: 'جرّب:',
+      examples: ['آلة حاسبة بسيطة', 'لعبة تخمين رقم', 'دالة ترتّب قائمة أرقام', 'التحقق من صحة بريد إلكتروني'],
+      hint: '«إدراج» يضيف الكود عند المؤشر، و«استبدال» يضعه مكان الملف كله.',
       insert: 'إدراج عند المؤشر',
       replace: 'استبدال الملف',
       generating: 'جارٍ التوليد…',
@@ -123,6 +127,10 @@ export const workspaceCopy = {
     generator: {
       open: 'AI Assistant',
       prompt: (language: string) => `Describe the ${language} code you want`,
+      intro: (language: string) => `Describe what you want in your own words, and the AI writes the ${language} code into your file.`,
+      examplesLabel: 'Try:',
+      examples: ['A simple calculator', 'A number guessing game', 'A function that sorts a list of numbers', 'Validate an email address'],
+      hint: 'Insert adds the code at the cursor; Replace swaps out the whole file.',
       insert: 'Insert at cursor',
       replace: 'Replace file',
       generating: 'Generating…',

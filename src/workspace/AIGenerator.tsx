@@ -1,7 +1,7 @@
 import { useRef, useState, type RefObject } from 'react'
 import type { OnMount } from '@monaco-editor/react'
 import { supabase } from '@/lib/supabase'
-import { accentButton, labelButton, outlineButton } from '@/lib/ui'
+import { accentButton, iconButton, outlineButton } from '@/lib/ui'
 import type { WorkspaceCopy } from './copy'
 import { readGenerated } from './fences'
 
@@ -121,32 +121,50 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
     }
   }
 
+  const sparkle = (
+    <svg viewBox="0 0 24 24" className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16v4M17 18h4" />
+    </svg>
+  )
+
   return (
     <>
+      {/* Tinted orange with its name always shown, so a first-time visitor spots it among the grey toolbar icons */}
       <button
         ref={toggleRef}
         type="button"
         onClick={() => (open ? close() : !needsAccount() && setOpen(true))}
         aria-expanded={open}
-        aria-label={g.open}
         title={g.open}
-        className={`${labelButton} ms-auto shrink-0`}
+        className="ms-auto flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/15 px-2.5 text-xs font-medium whitespace-nowrap text-accent transition-colors hover:bg-accent/25 aria-expanded:bg-accent aria-expanded:text-white"
       >
-        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16v4M17 18h4" />
-        </svg>
-        <span className="hidden whitespace-nowrap sm:inline">{g.open}</span>
+        {sparkle}
+        {g.open}
       </button>
       {/* فوق المحرر لا بجانبه: ارتفاع الصفحة لا يتغير، فلا تتأثر Lenis ولا مواضع ScrollTrigger.
           dialog غير نمطية ليبقى المحرر قابلاً للنقر لاختيار موضع المؤشر، واختصارات App تتوقف أثناء فتحها */}
       {open && (
         <dialog
           open
-          aria-label={g.open}
+          aria-labelledby="ai-title"
           data-lenis-prevent
           onKeyDown={(e) => e.key === 'Escape' && close()}
-          className="absolute inset-x-2 top-11 z-50 max-h-[calc(100%-3rem)] w-auto max-w-none origin-top scale-100 overflow-y-auto rounded-xl border border-line-strong bg-surface p-3 text-ink opacity-100 shadow-2xl transition-[opacity,scale] duration-200 starting:scale-95 starting:opacity-0"
+          className="absolute inset-x-2 top-11 z-50 max-h-[calc(100%-3rem)] w-auto max-w-none origin-top scale-100 overflow-y-auto rounded-xl border border-line-strong bg-surface p-4 text-ink opacity-100 shadow-2xl transition-[opacity,scale] duration-200 starting:scale-95 starting:opacity-0"
         >
+          <div className="mb-3 flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">{sparkle}</span>
+            <div className="min-w-0 flex-1">
+              <h2 id="ai-title" className="text-sm font-semibold text-ink">
+                {g.open}
+              </h2>
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-2">{g.intro(language)}</p>
+            </div>
+            <button type="button" onClick={close} aria-label={copy.cancel} className={iconButton}>
+              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -157,7 +175,7 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
               ref={promptRef}
               autoFocus
               dir="auto"
-              rows={2}
+              rows={3}
               value={prompt}
               maxLength={4000}
               aria-label={g.prompt(language)}
@@ -170,20 +188,39 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
               }}
               className="w-full resize-none rounded-lg border border-line-strong bg-page px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-2 focus:border-accent"
             />
+            {/* Ready-made requests: one tap fills the box, so nobody faces an empty field not knowing what to write */}
+            {!prompt.trim() && !busy && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-ink-2">{g.examplesLabel}</span>
+                {g.examples.map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    onClick={() => {
+                      setPrompt(example)
+                      promptRef.current?.focus({ preventScroll: true })
+                    }}
+                    className="rounded-full border border-line-strong px-2.5 py-1 text-xs text-ink-2 transition-colors hover:border-accent hover:text-ink"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            )}
             {error && (
               <p role="alert" className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-red-300">
                 {error}
               </p>
             )}
-            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-              {busy && (
-                <span role="status" className="me-auto text-sm text-ink-2">
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              {busy ? (
+                <span role="status" className="me-auto flex items-center gap-2 text-sm text-ink-2">
+                  <span className="size-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" aria-hidden="true" />
                   {lines > 1 ? g.writing(lines) : g.generating}
                 </span>
+              ) : (
+                <span className="me-auto text-xs text-ink-2">{g.hint}</span>
               )}
-              <button type="button" onClick={close} className={outlineButton}>
-                {copy.cancel}
-              </button>
               <button type="button" onClick={() => generate('replace')} disabled={!prompt.trim() || Boolean(busy)} className={outlineButton}>
                 {g.replace}
               </button>
