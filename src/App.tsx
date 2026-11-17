@@ -825,9 +825,13 @@ function App() {
               <span className={`size-2 rounded-full ${STATUS_STYLES[apiStatus]}`} aria-hidden="true" />
               {tr.status[apiStatus]}
             </span>
-            {/* المسجّل يغيّر اللغة من التفضيلات؛ الزائر ليس له تفضيلات فيبقى الزر له */}
-            {accountLoaded && !user && (
-              <button onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')} aria-label={tr.toggleLabel} className={outlineButton}>
+            {/* للجميع: المسجّل تُحفظ لغته في حسابه مثل التفضيلات، والزائر على هذا الجهاز فقط */}
+            {accountLoaded && (
+              <button
+                onClick={() => void (user ? saveLang : setLang)(lang === 'ar' ? 'en' : 'ar')}
+                aria-label={tr.toggleLabel}
+                className={outlineButton}
+              >
                 {tr.toggle}
               </button>
             )}
