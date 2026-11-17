@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Graduation project page the report's QR code opens: project name, team with training numbers, explainer video -->
+<!-- Graduation project page the report's QR code opens: project name, team with training numbers, presentation download, explainer video -->
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="utf-8" >
@@ -22,6 +22,16 @@
       .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 26px; padding: 0; list-style: none }
       .meta li { padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 15px }
       .meta b { color: var(--ink2); font-weight: 500 }
+      .dl { display: flex; align-items: center; gap: 16px; margin: 0 0 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(135deg, rgba(255, 77, 20, .1), transparent 55%), var(--surface); color: var(--ink); text-decoration: none; transition: border-color .2s, transform .2s }
+      .dl:hover { border-color: rgba(255, 77, 20, .55); transform: translateY(-1px) }
+      .dl:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px }
+      .dl .file { flex: none; display: grid; place-items: center; width: 52px; height: 60px; border-radius: 10px; background: var(--accent); color: var(--page); font: 600 15px/1 Inter, sans-serif }
+      .dl .txt { flex: 1; min-width: 0 }
+      .dl strong { display: block; font-size: 18px; font-weight: 600; line-height: 1.4 }
+      .dl small { display: block; color: var(--ink2); font-size: 14px }
+      .dl .go { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; background: var(--accent); color: var(--page); font-weight: 600; font-size: 15px }
+      .dl .go svg { width: 18px; height: 18px }
+      @media (max-width: 480px) { .dl { padding: 14px; gap: 12px } .dl .file { width: 44px; height: 52px } .dl .go span { display: none } .dl .go { padding: 12px } }
       video { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; background: #000; border: 1px solid var(--line) }
       h2 { margin: 34px 0 12px; font-size: 22px }
       .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface) }
@@ -47,6 +57,15 @@
         <li><b>المجموعة:</b> (1) المجموعة الأولى</li>
         <li><b>المشرف:</b> محمد المالكي</li>
       </ul>
+
+      <a class="dl" href="/project-presentation.pptx" download="عرض مشروع محرر الأكواد الذكي.pptx">
+        <span class="file" aria-hidden="true">PPT</span>
+        <span class="txt">
+          <strong>العرض التقديمي</strong>
+          <small>PowerPoint • 15 شريحة بالصوت • <bdi dir="ltr">6.2 MB</bdi></small>
+        </span>
+        <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" /></svg><span>تحميل</span></span>
+      </a>
 
       <video controls playsinline preload="metadata" poster="/project-poster.jpg">
         <source src="/project-video.mp4" type="video/mp4" >
