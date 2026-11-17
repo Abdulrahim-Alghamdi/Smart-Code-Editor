@@ -41,16 +41,16 @@ const copy = {
       { title: 'يحلل الذكاء الاصطناعي.', body: 'يقوم المساعد الذكي باكتشاف الأخطاء النحوية والمنطقية ويشرح الحل.' },
       { title: 'طبّق الإصلاح.', body: 'انسخ الشرح أو طبّق الكود المصحح بنقرة.' },
     ],
-    plansTitle: 'حساب مجاني، فحص بلا حدود',
+    plansTitle: 'حساب مجاني، 50 طلباً يومياً',
     plansSub: 'فحص الكود بالذكاء الاصطناعي متاح بعد تسجيل الدخول فقط. أنشئ حسابك بالبريد مجاناً.',
-    plan: { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['فحص بالذكاء الاصطناعي بلا حدود', 'الشرح بالعربية والإنجليزية', 'ملفاتك محفوظة في حسابك', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
+    plan: { name: 'حساب', price: 'مجاني', note: 'بالبريد الإلكتروني', features: ['50 طلب ذكاء اصطناعي يومياً', 'الشرح بالعربية والإنجليزية', 'ملفاتك محفوظة في حسابك', 'تطبيق الإصلاح بنقرة'], cta: 'أنشئ حساباً', badge: 'موصى به' },
     // خطوات البدء بجانب بطاقة الحساب: ما يفعله الزائر ليصل للفحص
     signupSteps: {
       name: 'ابدأ في دقيقة',
       steps: [
         ['أنشئ حساباً بالبريد', 'الاسم والبريد وكلمة المرور فقط.'],
         ['أكّد بريدك', 'رابط واحد يصلك فوراً.'],
-        ['افحص كودك', 'بلا حدود، وملفاتك محفوظة في حسابك.'],
+        ['افحص كودك', '50 طلباً كل يوم، وملفاتك محفوظة في حسابك.'],
       ],
       // زر بطاقة الحساب ينشئ حساباً، فهذا لمن عنده حساب حتى لا يتكرر الزر نفسه
       cta: 'لديك حساب؟ سجّل الدخول',
@@ -86,15 +86,15 @@ const copy = {
       { title: 'AI reviews it.', body: 'The AI Assistant detects syntax and logic errors and explains the solution.' },
       { title: 'Apply the fix.', body: 'Copy the explanation or apply the fix in one click.' },
     ],
-    plansTitle: 'Free account. Unlimited reviews.',
+    plansTitle: 'Free account. 50 AI requests a day.',
     plansSub: 'AI code reviews are for signed-in users only. Create your account with your email, free.',
-    plan: { name: 'Account', price: 'Free', note: 'With your email', features: ['Unlimited AI reviews', 'Arabic & English explanations', 'Files saved to your account', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
+    plan: { name: 'Account', price: 'Free', note: 'With your email', features: ['50 AI requests a day', 'Arabic & English explanations', 'Files saved to your account', 'One-click fixes'], cta: 'Create account', badge: 'Recommended' },
     signupSteps: {
       name: 'Get started in a minute',
       steps: [
         ['Create an account', 'Just your name, email and a password.'],
         ['Confirm your email', 'One link, sent right away.'],
-        ['Review your code', 'No limits, and your files are saved to your account.'],
+        ['Review your code', '50 requests every day, and your files are saved to your account.'],
       ],
       cta: 'Have an account? Log in',
     },

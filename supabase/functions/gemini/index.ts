@@ -3,6 +3,7 @@
 // and getUser below rejects the public anon key, which is also a valid JWT.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders, forbidden } from '../_shared/cors.ts'
+import { consumeAiQuota } from '../_shared/quota.ts'
 
 // Tried in order: if one is busy or times out, the next one gets the request
 const MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest']
@@ -93,7 +94,7 @@ Deno.serve(async (req) => {
   // A browser on any other site is refused before auth or Gemini run
   const cors = corsHeaders(req)
   if (!cors) return forbidden()
-  // error keys match the client's message keys: request, badResponse, network
+  // error keys match the client's message keys: request, badResponse, network, limit
   const reply = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 
@@ -115,6 +116,14 @@ Deno.serve(async (req) => {
     // invalid JSON falls through to the 400 below
   }
   if (!files) return reply(400, { error: 'request', detail: `Send 1-${MAX_FILES} files, ${MAX_TOTAL_CHARS} characters at most` })
+
+  // Counted only for a valid request, right before Gemini is called
+  try {
+    if (!(await consumeAiQuota(token))) return reply(429, { error: 'limit', detail: '' })
+  } catch (err) {
+    console.error('quota', err)
+    return reply(503, { error: 'request', detail: '(quota)' })
+  }
 
   const body = JSON.stringify({
     contents: [{ parts: [{ text: buildPrompt(files) }] }],

@@ -46,7 +46,7 @@ export const firstFreeModel = async <T>(call: (model: string) => Promise<T>) => 
 
 export default {
   async fetch(req: Request) {
-    // error keys match the client's message keys: request, badResponse, network, busy
+    // error keys match the client's message keys: request, badResponse, network, busy, limit
     const reply = (status: number, body: unknown) => Response.json(body, { status })
 
     if (req.method !== 'POST') return reply(405, { error: 'request', detail: 'POST only' })
@@ -62,6 +62,14 @@ export default {
 
     const input = parseRequest(await req.json().catch(() => null))
     if (!input) return reply(400, { error: 'request', detail: `Send a prompt of ${MAX_PROMPT_CHARS} characters at most and a language` })
+
+    // One daily quota shared with the review (supabase/migrations/20261117000000_ai_usage.sql); a failed check refuses
+    const quota = await createClient(supabaseUrl, supabaseKey, { global: { headers: { Authorization: `Bearer ${token}` } } }).rpc('consume_ai_quota')
+    if (quota.error) {
+      console.error('quota', quota.error)
+      return reply(503, { error: 'request', detail: '(quota)' })
+    }
+    if (quota.data === -1) return reply(429, { error: 'limit', detail: '' })
 
     const ai = new GoogleGenAI({ apiKey })
     const abortSignal = AbortSignal.timeout(TIMEOUT_MS)

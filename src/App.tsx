@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
 import Editor, { type Monaco, type OnMount } from '@monaco-editor/react'
 import { useLenis } from 'lenis/react'
 import { GitHubIcon, GoogleIcon, LockIcon } from '@/components/Icons'
-import LandingSections from '@/components/LandingSections'
 import SplitText from '@/components/SplitText'
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/gsap'
 import { LANGUAGES } from '@/lib/languages'
@@ -13,13 +12,10 @@ import { AIGenerator } from '@/workspace/AIGenerator'
 import { workspaceCopy } from '@/workspace/copy'
 import { detectLanguage, fileNameFor } from '@/workspace/detectLanguage'
 import { DEFAULT_EDITOR_SETTINGS, parseEditorSettings, type EditorSettings } from '@/workspace/editorSettings'
-import { ShortcutsDialog } from '@/workspace/ShortcutsDialog'
 import { SplitLayout } from '@/workspace/SplitLayout'
-import { OutputPanel } from '@/workspace/OutputPanel'
 import { BROWSER_RUN, inputMode, readsInput, SERVER_RUN } from '@/workspace/run'
-import { VersionsDialog } from '@/workspace/VersionsDialog'
 import { localDb, type Snapshot } from '@/services/localDb'
-import { AccountDialog, type AccountTab } from '@/account/AccountDialog'
+import type { AccountTab } from '@/account/AccountDialog'
 import { AccountMenu } from '@/account/AccountMenu'
 import { accountCopy } from '@/account/copy'
 import { Toast, type ToastMessage } from '@/account/Toast'
@@ -31,7 +27,18 @@ import { supabase } from '@/lib/supabase'
 import { useFiles } from '@/workspace/useFiles'
 import { useProjects } from '@/workspace/useProjects'
 import { useAuth } from '@/account/useAuth'
+import { t, type ErrorKey } from '@/appCopy'
+import { parseReview, type Review } from '@/workspace/review'
+import { decodeShare, encodeShare, SHARE_PREFIX } from '@/workspace/share'
+import { inlineProjectFiles } from '@/workspace/preview'
 import { extraPublics, javaFileName } from '../supabase/functions/_shared/javaSource'
+
+// أجزاء لا تظهر في أول شاشة تُحمَّل عند الحاجة، فيصغر ملف JavaScript الأول ويظهر المحرر أسرع على الجوال
+const LandingSections = lazy(() => import('@/components/LandingSections'))
+const OutputPanel = lazy(() => import('@/workspace/OutputPanel').then((m) => ({ default: m.OutputPanel })))
+const VersionsDialog = lazy(() => import('@/workspace/VersionsDialog').then((m) => ({ default: m.VersionsDialog })))
+const ShortcutsDialog = lazy(() => import('@/workspace/ShortcutsDialog').then((m) => ({ default: m.ShortcutsDialog })))
+const AccountDialog = lazy(() => import('@/account/AccountDialog').then((m) => ({ default: m.AccountDialog })))
 
 type Lang = 'ar' | 'en'
 type Tab = 'bugs' | 'fix' | 'optimize'
@@ -44,27 +51,6 @@ interface ProjectFile {
   name: string
   language: string
   content: string
-}
-
-interface FileContent {
-  name: string
-  content: string
-}
-
-interface ReviewText {
-  bugs: string[]
-  rootCause: string
-  fixes: string[]
-  optimizations: string[]
-}
-
-// شكل المراجعة المنظمة التي نطلبها من Gemini: الشرح باللغتين حتى يتبع لغة الواجهة عند تبديلها، والكود مشترك
-interface Review {
-  ar: ReviewText
-  en: ReviewText
-  fixedFiles: FileContent[]
-  renamedFiles: Array<{ from: string; to: string }>
-  suggestedFiles: FileContent[]
 }
 
 // uuid لأن معرّف الملف هو مفتاحه في جدول files
@@ -135,204 +121,12 @@ const download = (name: string, text: string, type: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-// قاموس الترجمة لجميع نصوص الواجهة
-const t = {
-  ar: {
-    brand: 'محرر الأكواد الذكي',
-    title: 'ماذا ستصلح اليوم؟',
-    subtitle: 'الصق الكود ودع الذكاء الاصطناعي يكتشف الأخطاء ويشرح الحل',
-    toggle: 'English',
-    toggleLabel: 'التبديل إلى الإنجليزية',
-    scrollDown: 'انتقل إلى المزايا',
-    language: 'لغة البرمجة',
-    tryExample: 'جرّب مثالاً',
-    exampleNames: ['خطأ نحوي', 'خطأ منطقي', 'كود نظيف'],
-    copyCode: 'نسخ الكود',
-    clear: 'مسح المحرر',
-    copied: 'تم النسخ ✓',
-    analyze: 'فحص الكود بالذكاء الاصطناعي',
-    analyzing: 'جاري الفحص واستخراج الأخطاء...',
-    stopAnalyze: 'إيقاف الفحص',
-    reviewStopped: 'أُوقف الفحص.',
-    closeReview: 'إغلاق المراجعة',
-    signinToAnalyze: 'سجّل الدخول أو أنشئ حساباً مجانياً لفحص الكود بالذكاء الاصطناعي',
-    tabs: { bugs: 'تحليل الأخطاء والسبب الجذري', fix: 'الإصلاح المقترح', optimize: 'التحسين وأفضل الممارسات' },
-    rootCause: 'السبب الجذري',
-    noBugs: 'لم يتم العثور على أخطاء.',
-    noFix: 'لا يحتاج الكود إلى إصلاح.',
-    noOptimizations: 'لا توجد اقتراحات تحسين.',
-    suggestedFiles: 'ملفات الأصناف المقترحة',
-    createFiles: 'إنشاء ملفات الأصناف المقترحة',
-    files: {
-      label: 'ملفات المشروع',
-      new: 'ملف جديد',
-      close: 'إغلاق',
-      rename: 'اسم الملف',
-      renameAction: 'إعادة تسمية',
-      renameHint: 'انقر مرتين أو اضغط F2 لإعادة التسمية',
-      import: 'استيراد',
-      export: 'حفظ',
-      importSkipped: 'لم تُستورد هذه الملفات لأنها ليست نصية أو أكبر من 1 ميغابايت:',
-    },
-    applyFix: 'تطبيق إصلاح الذكاء الاصطناعي',
-    copyExplanation: 'نسخ الشرح',
-    lines: 'سطر',
-    chars: 'حرف',
-    status: { checking: 'جاري الفحص', error: 'خطأ في الاتصال', online: 'متصل', ready: 'جاهز' },
-    auth: {
-      login: 'تسجيل الدخول',
-      signupButton: 'إنشاء حساب',
-      signinTitle: 'تسجيل الدخول',
-      signupTitle: 'إنشاء حساب',
-      featureNotice: 'هذه الميزة متاحة بحساب مجاني. أنشئ حساباً أو سجّل الدخول لاستخدامها.',
-      sessionNotice: 'انتهت جلستك (ربما سجّلت الخروج من جهاز آخر). سجّل الدخول من جديد ثم أعد الفحص.',
-      name: 'الاسم',
-      email: 'البريد الإلكتروني',
-      emailOrUsername: 'البريد الإلكتروني أو اسم المستخدم',
-      password: 'كلمة المرور',
-      signin: 'دخول',
-      signup: 'إنشاء الحساب',
-      noAccount: 'ليس لديك حساب؟',
-      haveAccount: 'لديك حساب بالفعل؟',
-      toSignup: 'أنشئ حساباً',
-      toSignin: 'سجّل الدخول',
-      close: 'إغلاق',
-      forgot: 'نسيت كلمة المرور؟',
-      resetTitle: 'استعادة كلمة المرور',
-      sendReset: 'إرسال رابط الاستعادة',
-      resetSent: 'إذا كان البريد مسجّلاً فستصلك رسالة فيها رابط لتعيين كلمة مرور جديدة.',
-      newPasswordTitle: 'كلمة مرور جديدة',
-      savePassword: 'حفظ كلمة المرور',
-      checkEmail: 'أرسلنا رسالة تأكيد إلى بريدك. افتح الرابط فيها لتفعيل حسابك.',
-      backToSignin: 'العودة لتسجيل الدخول',
-      // ⁦…⁩ يعزل اسم المزوّد اللاتيني داخل الجملة العربية
-      continueWith: (provider: string) => `المتابعة عبر ⁦${provider}⁩`,
-      or: 'أو',
-    },
-    errors: {
-      request: 'تعذر الحصول على نتيجة.',
-      badResponse: 'وصل رد غير مفهوم من الذكاء الاصطناعي. حاول مرة أخرى.',
-      network: 'انتهت مهلة الاتصال بالذكاء الاصطناعي أو انقطع الاتصال. حاول مرة أخرى.',
-    },
-  },
-  en: {
-    brand: 'Smart Code Editor',
-    title: 'What will you fix today?',
-    subtitle: 'Paste your code — AI finds the bugs and explains the fix',
-    toggle: 'العربية',
-    toggleLabel: 'Switch to Arabic',
-    scrollDown: 'Scroll to features',
-    language: 'Language',
-    tryExample: 'Try an example',
-    exampleNames: ['Syntax Error', 'Logic Bug', 'Clean Code'],
-    copyCode: 'Copy Code',
-    clear: 'Clear Editor',
-    copied: 'Copied ✓',
-    analyze: 'Analyze code with AI',
-    analyzing: 'Analyzing and extracting errors...',
-    stopAnalyze: 'Stop review',
-    reviewStopped: 'Review stopped.',
-    closeReview: 'Close review',
-    signinToAnalyze: 'Log in or create a free account to review code with AI',
-    tabs: { bugs: 'Bug Analysis & Root Cause', fix: 'Suggested Code Fix', optimize: 'Optimization & Best Practices' },
-    rootCause: 'Root Cause',
-    noBugs: 'No bugs found.',
-    noFix: 'The code needs no fix.',
-    noOptimizations: 'No optimization suggestions.',
-    suggestedFiles: 'Suggested class files',
-    createFiles: 'Create Suggested Class Files',
-    files: {
-      label: 'Project files',
-      new: 'New file',
-      close: 'Close',
-      rename: 'File name',
-      renameAction: 'Rename',
-      renameHint: 'Double-click or press F2 to rename',
-      import: 'Import',
-      export: 'Save',
-      importSkipped: 'These files were not imported because they are not text or are over 1 MB:',
-    },
-    applyFix: 'Apply AI Fix',
-    copyExplanation: 'Copy Explanation',
-    lines: 'lines',
-    chars: 'chars',
-    status: { checking: 'Analyzing', error: 'Connection error', online: 'Online', ready: 'Ready' },
-    auth: {
-      login: 'Log in',
-      signupButton: 'Sign up',
-      signinTitle: 'Log in',
-      signupTitle: 'Create account',
-      featureNotice: 'This feature comes with a free account. Create one or log in to use it.',
-      sessionNotice: 'Your session has ended (maybe you signed out on another device). Log in again, then run the review.',
-      name: 'Name',
-      email: 'Email',
-      emailOrUsername: 'Email or username',
-      password: 'Password',
-      signin: 'Log in',
-      signup: 'Create account',
-      noAccount: "Don't have an account?",
-      haveAccount: 'Already have an account?',
-      toSignup: 'Sign up',
-      toSignin: 'Log in',
-      close: 'Close',
-      forgot: 'Forgot password?',
-      resetTitle: 'Reset password',
-      sendReset: 'Send reset link',
-      resetSent: "If that email has an account, we've sent it a link to set a new password.",
-      newPasswordTitle: 'Set a new password',
-      savePassword: 'Save password',
-      checkEmail: "We've sent you a confirmation email. Open the link in it to activate your account.",
-      backToSignin: 'Back to log in',
-      continueWith: (provider: string) => `Continue with ${provider}`,
-      or: 'or',
-    },
-    errors: {
-      request: 'Could not get a result.',
-      badResponse: 'The AI returned a response that could not be read. Please try again.',
-      network: 'The AI request timed out or the connection dropped. Please try again.',
-    },
-  },
-}
-
-type ErrorKey = keyof (typeof t)['en']['errors']
 
 const STATUS_STYLES = {
   checking: 'bg-amber-400 animate-pulse',
   error: 'bg-red-500',
   online: 'bg-emerald-500',
   ready: 'bg-ink-2',
-}
-
-// الرد قادم من خدمة خارجية، لذا نتحقق من شكله قبل عرضه
-const isFileList = (v: unknown): v is FileContent[] =>
-  Array.isArray(v) && v.every((f) => typeof f?.name === 'string' && typeof f?.content === 'string')
-
-const isReviewText = (v: ReviewText | undefined) =>
-  Array.isArray(v?.bugs) && typeof v.rootCause === 'string' && Array.isArray(v.fixes) && Array.isArray(v.optimizations)
-
-const parseReview = (text: string): Review | null => {
-  try {
-    const r = JSON.parse(text)
-    const ok =
-      isReviewText(r.ar) &&
-      isReviewText(r.en) &&
-      isFileList(r.fixedFiles) &&
-      Array.isArray(r.renamedFiles) &&
-      r.renamedFiles.every((x: Review['renamedFiles'][number]) => typeof x?.from === 'string' && typeof x?.to === 'string') &&
-      isFileList(r.suggestedFiles)
-    if (!ok) return null
-    // الأسماء المقترحة تصبح أسماء تبويبات، فنزيل منها أي مسار ونهمل الفارغ
-    const baseName = (name: string) => name.split(/[\\/]/).pop()!.trim()
-    r.suggestedFiles = r.suggestedFiles
-      .map((f: FileContent) => ({ ...f, name: baseName(f.name) }))
-      .filter((f: FileContent) => f.name)
-    r.renamedFiles = r.renamedFiles
-      .map((x: Review['renamedFiles'][number]) => ({ ...x, to: baseName(x.to) }))
-      .filter((x: Review['renamedFiles'][number]) => x.to)
-    return r
-  } catch {
-    return null
-  }
 }
 
 const chip = 'h-8 rounded-md bg-surface-2 px-2.5 text-[13px] text-ink transition-colors hover:bg-line'
@@ -402,7 +196,9 @@ function App() {
     if (SERVER_RUN.includes(language) && needsAccount()) return
     const stdin = programInput.current
     const waiting = !force && !stdin.trim() && inputMode(language, code) === 'collect' && readsInput(language, code)
-    setOutput({ fileId: active.id, name: active.name, language, code, stdin, waiting, fresh, run: (output?.run ?? 0) + 1 })
+    // معاينة HTML تأخذ ملفات CSS و JavaScript المربوطة بها من تبويبات المشروع
+    const source = language === 'html' ? inlineProjectFiles(code, files) : code
+    setOutput({ fileId: active.id, name: active.name, language, code: source, stdin, waiting, fresh, run: (output?.run ?? 0) + 1 })
   }
   const outputOpen = output?.fileId === active.id && output.language === language
   const apiStatus = loading ? 'checking' : error ? 'error' : lastModel ? 'online' : 'ready'
@@ -831,6 +627,45 @@ function App() {
     notify(wc.toasts.fileSaved(name), 'success')
   }
 
+  // رابط فيه الملف النشط نفسه (لا يمر بأي خادم)، يُنسخ للحافظة
+  const shareFile = async () => {
+    const hash = await encodeShare(active)
+    if (!hash) return notify(wc.toasts.shareTooLarge, 'error')
+    try {
+      await navigator.clipboard.writeText(`${location.origin}${location.pathname}${hash}`)
+      notify(wc.toasts.shareCopied, 'success')
+    } catch (err) {
+      console.error(err)
+      notify(wc.toasts.shareFailed, 'error')
+    }
+  }
+
+  // فتح رابط مشاركة: الملف يُضاف تبويباً جديداً ولا يستبدل شيئاً، ثم يُمسح من شريط العنوان حتى لا يُفتح مرة ثانية عند التحديث
+  // hashchange: رابط مشاركة لُصق في شريط عنوان الموقع وهو مفتوح، فالمتصفح لا يعيد تحميل الصفحة
+  const openShared = useRef(() => {})
+  useEffect(() => {
+    openShared.current = () => {
+      const hash = location.hash
+      if (!hash.startsWith(SHARE_PREFIX)) return
+      history.replaceState(null, '', location.pathname + location.search)
+      void decodeShare(hash).then((shared) => {
+        if (!shared) return notify(wc.toasts.shareBroken, 'error')
+        const language = LANGUAGES.some((l) => l.id === shared.language) ? shared.language : languageOf(shared.name, LANGUAGES[0].id)
+        const file = { id: newId(), name: uniqueName(shared.name, files.map((f) => f.name)), language, content: shared.content }
+        setFiles((all) => [...all, file])
+        resetRun()
+        setActiveFile(file.id)
+        notify(wc.toasts.sharedOpened(file.name), 'success')
+      })
+    }
+  })
+  useEffect(() => {
+    const open = () => openShared.current()
+    open()
+    window.addEventListener('hashchange', open)
+    return () => window.removeEventListener('hashchange', open)
+  }, [])
+
   // الإغلاق فوري بلا تأكيد، بطلب المستخدم
   const closeFile = (file: ProjectFile) => {
     if (files.length === 1) return
@@ -1008,7 +843,7 @@ function App() {
               />
             ) : (
               <>
-                <button onClick={() => openAuth('signin')} className={`${outlineButton} hidden sm:block`}>
+                <button onClick={() => openAuth('signin')} className={outlineButton}>
                   {tr.auth.login}
                 </button>
                 <button onClick={() => openAuth('signup')} className={accentButton}>
@@ -1085,6 +920,12 @@ function App() {
                       <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" />
                     </svg>
                     <span className="hidden sm:inline">{wc.versions}</span>
+                  </button>
+                  <button onClick={shareFile} disabled={!code.trim()} aria-label={wc.shareTitle} title={wc.shareTitle} className={labelButton}>
+                    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
+                    </svg>
+                    <span className="hidden sm:inline">{wc.share}</span>
                   </button>
                   <AIGenerator
                     editorRef={editorRef}
@@ -1206,6 +1047,7 @@ function App() {
 
                 {/* المخرجات للملف ولغته؛ تغيير اللغة بإعادة التسمية (main.js ← main.py) يخفيها أيضاً */}
                 {outputOpen && (
+                  <Suspense fallback={null}>
                   <OutputPanel
                     key={output.run}
                     name={output.name}
@@ -1222,6 +1064,7 @@ function App() {
                     onClose={() => setOutput(null)}
                     copy={wc}
                   />
+                  </Suspense>
                 )}
 
                 <div className="mt-2 flex items-center gap-1 border-t border-line p-2">
@@ -1504,7 +1347,9 @@ function App() {
           </button>
         </section>
 
-        <LandingSections lang={lang} exampleNames={tr.exampleNames} onSignup={() => openAuth('signup')} onSignin={() => openAuth('signin')} showSignup={accountLoaded && !user} />
+        <Suspense fallback={null}>
+          <LandingSections lang={lang} exampleNames={tr.exampleNames} onSignup={() => openAuth('signup')} onSignin={() => openAuth('signin')} showSignup={accountLoaded && !user} />
+        </Suspense>
       </main>
 
       {/* نافذة تسجيل الدخول وإنشاء الحساب — تفتح من الهيدر أو عند محاولة الزائر استخدام ميزة للمسجّلين */}
@@ -1629,6 +1474,7 @@ function App() {
         )}
       </dialog>
 
+      <Suspense fallback={null}>
       {user && (
         <AccountDialog
           tab={accountTab}
@@ -1644,8 +1490,8 @@ function App() {
           onEditor={saveEditor}
         />
       )}
-      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} copy={wc} />
-      <VersionsDialog
+      {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} copy={wc} />}
+      {versions && <VersionsDialog
         versions={versions}
         fileName={active.name}
         current={code}
@@ -1656,7 +1502,8 @@ function App() {
         confirm={confirm}
         lang={lang}
         copy={wc}
-      />
+      />}
+      </Suspense>
       <ConfirmDialog pending={pendingConfirm} onSettle={settleConfirm} />
       <Toast message={toast} onDone={clearToast} />
     </div>

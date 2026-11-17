@@ -21,6 +21,12 @@ const COMPILERS: Record<string, string[]> = {
   ruby: ['ruby-3.4.9', 'ruby-3.3.11'],
   typescript: ['typescript-5.6.2'],
   shell: ['bash'],
+  // godbolt: ids run on Compiler Explorer (https://godbolt.org), also free with no key, for what Wandbox lacks or can't
+  // start. Each ran a hello program on 2026-11-17 (GET /api/compilers/<lang>, then POST /api/compiler/<id>/compile).
+  // shortcut: its runners print non-ASCII text from Kotlin and Dart as ?; look for a runtime flag if Arabic output matters
+  kotlin: ['godbolt:kotlinc2421', 'godbolt:kotlinc2420'],
+  swift: ['godbolt:swift642', 'godbolt:swift641'],
+  dart: ['godbolt:dart394', 'godbolt:dart393'],
 }
 const MAX_CHARS = 100_000
 // Wandbox's locale is POSIX, so the JVM encodes System.out and System.err as ASCII and writes a literal ? for every
@@ -68,6 +74,52 @@ const tidy = (text: string | undefined, filename: string) =>
   (text ?? '')
     .replace(/^# _\/home\/wandbox\n/gm, '')
     .replace(/(?:\/home\/wandbox\/|\.\/)?\bprog\.(\w+)\b/g, filename)
+    // Compiler Explorer's name for the file
+    .replace(/(?:\/app\/)?\bexample\.(kt|swift|dart)\b/g, filename)
+
+interface GodboltResult {
+  code?: number
+  timedOut?: boolean
+  stdout?: Array<{ text: string }>
+  stderr?: Array<{ text: string }>
+  buildResult?: { code?: number; stderr?: Array<{ text: string }> }
+}
+const joinLines = (lines?: Array<{ text: string }>) => (lines ?? []).map((l) => l.text).join('\n')
+
+// One call to Compiler Explorer, answered in Wandbox's shape so the rest of this function stays the same
+async function godbolt(compiler: string, code: string, stdin: string, timeoutMs: number): Promise<Attempt> {
+  try {
+    const res = await fetch(`https://godbolt.org/api/compiler/${compiler}/compile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        source: code,
+        options: { userArguments: '', executeParameters: { args: [], stdin }, compilerOptions: { executorRequest: true }, filters: { execute: true }, tools: [], libraries: [] },
+        allowStoreCodeDebug: false,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (res.status === 429 || res.status >= 500) return { ok: false, kind: 'busy', detail: `HTTP ${res.status}` }
+    // 404: the compiler id was retired, so try the fallback
+    if (res.status === 404) return { ok: false, kind: 'unavailable', detail: compiler }
+    if (!res.ok) return { ok: false, kind: 'request', detail: `HTTP ${res.status}` }
+    const r: GodboltResult = await res.json()
+    const buildFailed = (r.buildResult?.code ?? 0) !== 0
+    return {
+      ok: true,
+      result: {
+        // the build's stderr on success is only the Kotlin compiler's own noise (a jansi warning), not the user's
+        compiler_error: buildFailed ? joinLines(r.buildResult?.stderr) : '',
+        program_output: joinLines(r.stdout),
+        program_error: joinLines(r.stderr),
+        status: String(buildFailed ? (r.buildResult?.code ?? 1) : r.timedOut ? 137 : (r.code ?? 0)),
+      },
+    }
+  } catch (err) {
+    const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
+    return { ok: false, kind: timedOut ? 'timeout' : 'busy', detail: timedOut ? undefined : String(err) }
+  }
+}
 
 // One call to Wandbox. Raw server errors (HTML error pages, "Too many requests", container failures) become an Attempt
 // kind here, so none of them reach the user as-is
@@ -142,7 +194,11 @@ Deno.serve(async (req) => {
   let attempt: Attempt
   for (;;) {
     // AbortSignal.timeout needs a whole number of milliseconds
-    attempt = await compile(compilers[compilerIndex], source, stdin, RUNTIME_OPTIONS[language], Math.max(1, Math.floor(deadline - performance.now())))
+    const compiler = compilers[compilerIndex]
+    const timeLeft = Math.max(1, Math.floor(deadline - performance.now()))
+    attempt = compiler.startsWith('godbolt:')
+      ? await godbolt(compiler.slice('godbolt:'.length), source, stdin, timeLeft)
+      : await compile(compiler, source, stdin, RUNTIME_OPTIONS[language], timeLeft)
     if (attempt.ok || attempt.kind === 'request' || attempt.kind === 'timeout') break
     // container down: switch to the fallback compiler straight away
     if (attempt.kind === 'unavailable' && compilerIndex + 1 < compilers.length) {

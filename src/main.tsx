@@ -14,3 +14,8 @@ createRoot(document.getElementById('root')!).render(
     </AuthProvider>
   </StrictMode>,
 )
+
+// The service worker only runs in the built site: in dev it would cache Vite's modules and hide edits
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(console.error))
+}

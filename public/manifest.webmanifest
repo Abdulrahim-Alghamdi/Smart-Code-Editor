@@ -1,0 +1,16 @@
+{
+  "name": "Smart Code Editor",
+  "short_name": "Smart Code",
+  "description": "A code editor that finds bugs in 21 languages and explains the fix in Arabic and English.",
+  "lang": "ar",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f0d0c",
+  "theme_color": "#0f0d0c",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

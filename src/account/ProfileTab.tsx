@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type ReactNode, type SubmitEvent } 
 import { accentButton, input, outlineButton } from '@/lib/ui'
 import { Avatar } from './AccountMenu'
 import type { AccountCopy } from './copy'
+import { UsageStats } from './UsageStats'
 import { AVATAR_TYPES, checkAvatarFile, LIMITS, validateProfile, type Profile, type ProfileField } from './validation'
 
 const AVATAR_PX = 128
@@ -117,6 +118,7 @@ export function ProfileTab({ account, copy, onSave, notify }: Props) {
 
   return (
     <form ref={formRef} onSubmit={submit} noValidate className="space-y-5">
+      <UsageStats copy={copy} />
       <div className="flex items-center gap-4">
         <Avatar profile={draft} size="size-16" />
         <div className="space-y-2">
