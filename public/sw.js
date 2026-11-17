@@ -24,7 +24,8 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone()
-          if (response.ok) caches.open(CACHE).then((cache) => cache.put('/', copy))
+          // Only app pages become the offline copy of '/', not static pages like /project.html
+          if (response.ok && !url.pathname.includes('.')) caches.open(CACHE).then((cache) => cache.put('/', copy))
           return response
         })
         .catch(() => caches.match('/').then((cached) => cached ?? Response.error()))

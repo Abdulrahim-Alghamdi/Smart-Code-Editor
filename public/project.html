@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Graduation project page the report's QR code opens: project name, team with training numbers, explainer video -->
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" >
+    <meta name="viewport" content="width=device-width, initial-scale=1" >
+    <meta name="theme-color" content="#0f0d0c" >
+    <title>محرر الأكواد الذكي | مشروع التخرج</title>
+    <meta name="description" content="مشروع تخرج: محرر الأكواد الذكي - الكلية التقنية للبنين بالباحة" >
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" >
+    <link rel="preconnect" href="https://fonts.googleapis.com" >
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin >
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Inter:wght@500;600&display=swap" rel="stylesheet" >
+    <style>
+      :root { --page: #0f0d0c; --surface: #1c1917; --line: #2e2a26; --ink: #f4f1ed; --ink2: #a8a29c; --accent: #ff4d14 }
+      * { box-sizing: border-box }
+      body { margin: 0; background: var(--page); color: var(--ink); font: 400 17px/1.7 'IBM Plex Sans Arabic', system-ui, sans-serif }
+      main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px }
+      .eyebrow { margin: 0; color: var(--accent); font-weight: 600; font-size: 15px }
+      h1 { margin: 6px 0 0; font-size: clamp(32px, 7vw, 48px); line-height: 1.2 }
+      .en { margin: 2px 0 0; font: 600 20px/1.3 Inter, sans-serif; color: var(--ink2); direction: ltr; text-align: right }
+      .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 26px; padding: 0; list-style: none }
+      .meta li { padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 15px }
+      .meta b { color: var(--ink2); font-weight: 500 }
+      video { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; background: #000; border: 1px solid var(--line) }
+      h2 { margin: 34px 0 12px; font-size: 22px }
+      .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface) }
+      table { width: 100%; border-collapse: collapse; font-size: 16px }
+      th, td { padding: 12px 14px; text-align: right; border-bottom: 1px solid var(--line) }
+      @media (max-width: 480px) { th, td { padding: 10px 10px; font-size: 15px } }
+      th { color: var(--ink2); font-weight: 500; font-size: 14px }
+      tr:last-child td { border-bottom: 0 }
+      td.id { font-family: Inter, sans-serif; direction: ltr; text-align: right; white-space: nowrap }
+      .lead td { color: var(--accent); font-weight: 600 }
+      .cta { display: inline-block; margin-top: 30px; padding: 12px 26px; border-radius: 999px; background: var(--accent); color: var(--page); font-weight: 600; text-decoration: none }
+      .cta:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px }
+      footer { margin-top: 36px; color: var(--ink2); font-size: 14px }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">مشروع التخرج</p>
+      <h1>محرر الأكواد الذكي</h1>
+      <p class="en">Smart Code Editor</p>
+      <ul class="meta">
+        <li><b>الجهة:</b> الكلية التقنية للبنين بالباحة</li>
+        <li><b>المجموعة:</b> (1) المجموعة الأولى</li>
+        <li><b>المشرف:</b> محمد المالكي</li>
+      </ul>
+
+      <video controls playsinline preload="metadata" poster="/project-poster.jpg">
+        <source src="/project-video.mp4" type="video/mp4" >
+        متصفحك لا يعرض الفيديو. <a href="/project-video.mp4">حمّل المقطع</a>
+      </video>
+
+      <h2>أعضاء المجموعة ومنفذو المشروع</h2>
+      <div class="table">
+        <table>
+          <thead><tr><th>م</th><th>الاسم</th><th>الرقم التدريبي</th><th>الصفة</th></tr></thead>
+          <tbody>
+            <tr class="lead"><td>1</td><td>عبدالرحيم رشود الغامدي</td><td class="id">445258331</td><td>مدير المشروع</td></tr>
+            <tr><td>2</td><td>تركي حمود هزازي</td><td class="id">445211242</td><td>عضو</td></tr>
+            <tr><td>3</td><td>خالد مطير الزهراني</td><td class="id">445211243</td><td>عضو</td></tr>
+            <tr><td>4</td><td>علي أحمد بكرين</td><td class="id">445211031</td><td>عضو</td></tr>
+            <tr><td>5</td><td>عبدالرحمن علي البقمي</td><td class="id">445211239</td><td>عضو</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <a class="cta" href="/">جرّب الموقع</a>
+      <footer>المؤسسة العامة للتدريب التقني والمهني</footer>
+    </main>
+  </body>
+</html>
