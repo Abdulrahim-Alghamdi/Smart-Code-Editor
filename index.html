@@ -39,7 +39,20 @@
     <meta name="twitter:image:alt" content="محرر الأكواد الذكي: محرر كود مع فحص بالذكاء الاصطناعي">
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Shown until React mounts (createRoot replaces it): continues the phone's launch screen with the same colour, icon and name -->
+    <div id="root">
+      <div class="boot" aria-hidden="true">
+        <img src="/icon.svg" width="88" height="88" alt="">
+        <span>Smart Code Editor</span>
+      </div>
+      <style>
+        .boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: #0f0d0c; color: #f4f1ed; font: 500 18px/1.2 Inter, system-ui, sans-serif; letter-spacing: .01em }
+        .boot img { border-radius: 22px; box-shadow: 0 12px 40px -8px rgb(255 77 20 / .45); animation: boot-pulse 1.6s ease-in-out infinite }
+        .boot span { opacity: .85 }
+        @keyframes boot-pulse { 50% { transform: scale(.94); box-shadow: 0 6px 24px -8px rgb(255 77 20 / .3) } }
+        @media (prefers-reduced-motion: reduce) { .boot img { animation: none } }
+      </style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

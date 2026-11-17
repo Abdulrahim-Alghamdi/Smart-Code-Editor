@@ -1,7 +1,7 @@
 // Lets the installed app open without a connection. Pages: network first, so a new deploy shows at once and the
 // last copy is the offline fallback. /assets/: cache first, safe because Vite puts a content hash in every name.
 // Anything else (Supabase, /api, fonts, CDNs) is left to the network untouched.
-const CACHE = 'sce-v1'
+const CACHE = 'sce-v2'
 
 self.addEventListener('install', () => self.skipWaiting())
 
