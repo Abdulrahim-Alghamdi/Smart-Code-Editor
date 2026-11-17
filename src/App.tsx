@@ -882,7 +882,8 @@ function App() {
               {/* صندوق المحرر بتصميم صندوق الإدخال */}
               <div className="relative flex flex-col overflow-hidden rounded-2xl border border-accent-soft bg-surface-2 shadow-sm">
                 {/* شريط أوامر الملفات فوق التبويبات؛ LTR مثل التبويبات والمحرر حتى يبقى على اليسار وبالترتيب نفسه في العربية */}
-                <div dir="ltr" className="flex flex-wrap items-center gap-1 px-2 pt-2">
+                {/* Phones: narrower icon buttons, so the icons and the full AI Assistant button share one line */}
+                <div dir="ltr" className="flex items-center gap-1 px-2 pt-2 max-sm:gap-0.5 max-sm:[&>button]:px-1.5">
                   <input
                     ref={importRef}
                     type="file"

@@ -129,15 +129,14 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
 
   return (
     <>
-      {/* Tinted orange with its name always shown, so a first-time visitor spots it among the grey toolbar icons.
-          Phones: a full-width row of its own, since it and the icons do not fit on one line */}
+      {/* Tinted orange with its name always shown, so a first-time visitor spots it among the grey toolbar icons */}
       <button
         ref={toggleRef}
         type="button"
         onClick={() => (open ? close() : !needsAccount() && setOpen(true))}
         aria-expanded={open}
         title={g.open}
-        className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg sm:ms-auto sm:w-auto border border-accent/40 bg-accent/15 px-2.5 text-xs font-medium whitespace-nowrap text-accent transition-colors hover:bg-accent/25 aria-expanded:bg-accent aria-expanded:text-white"
+        className="ms-auto flex h-8 shrink-0 items-center gap-1.5 rounded-lg max-[359px]:[&>svg]:hidden border border-accent/40 bg-accent/15 px-2.5 text-xs font-medium whitespace-nowrap text-accent transition-colors hover:bg-accent/25 aria-expanded:bg-accent aria-expanded:text-white"
       >
         {sparkle}
         {g.open}
@@ -150,7 +149,7 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
           aria-labelledby="ai-title"
           data-lenis-prevent
           onKeyDown={(e) => e.key === 'Escape' && close()}
-          className="absolute inset-x-2 top-20 z-50 max-h-[calc(100%-5.5rem)] sm:top-11 sm:max-h-[calc(100%-3rem)] w-auto max-w-none origin-top scale-100 overflow-y-auto rounded-xl border border-line-strong bg-surface p-4 text-ink opacity-100 shadow-2xl transition-[opacity,scale] duration-200 starting:scale-95 starting:opacity-0"
+          className="absolute inset-x-2 top-11 z-50 max-h-[calc(100%-3rem)] w-auto max-w-none origin-top scale-100 overflow-y-auto rounded-xl border border-line-strong bg-surface p-4 text-ink opacity-100 shadow-2xl transition-[opacity,scale] duration-200 starting:scale-95 starting:opacity-0"
         >
           <div className="mb-3 flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">{sparkle}</span>
