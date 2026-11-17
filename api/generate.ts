@@ -8,11 +8,16 @@ import { createClient } from '@supabase/supabase-js'
 const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-lite-latest']
 // Gemini's "overloaded" and "rate limited" answers; any other error would fail the same way on the next model
 const BUSY_STATUSES = [429, 503]
-// Shared by all the attempts and under maxDuration in vercel.json, so the browser gets our error and not Vercel's timeout page
-const TIMEOUT_MS = 55_000
+// Shared by all the attempts and under maxDuration (300 s) in vercel.json, so the browser gets our error and not a cut stream.
+// The reply streams as Gemini writes it, so a long file keeps the connection alive instead of waiting in silence
+const TIMEOUT_MS = 285_000
 // Caps what one request can send to Gemini on your bill
 const MAX_PROMPT_CHARS = 4_000
 const MAX_LANGUAGE_CHARS = 30
+// Ends the streamed code, followed by a status; must match END in src/workspace/fences.ts
+const END = '\u0000'
+// The models' ceiling, so a long file isn't cut at a lower default
+const MAX_OUTPUT_TOKENS = 65_536
 
 const systemPrompt = (language: string) => `You generate code for a code editor. The active file's language is ${language}.
 Write what the user asks in the language they name; if they name none, use ${language}.
@@ -27,9 +32,6 @@ export const parseRequest = (raw: unknown): { prompt: string; language: string }
   const ok = input.prompt && input.language && input.prompt.length <= MAX_PROMPT_CHARS && input.language.length <= MAX_LANGUAGE_CHARS
   return ok ? input : null
 }
-
-// The system prompt asks for raw code, but a model can still wrap it in a fence, which would land in the user's file
-export const stripFences = (text: string) => (/^\s*```[^\n]*\n([\s\S]*?)\n?```\s*$/.exec(text)?.[1] ?? text).trim()
 
 // The first model that answers wins; null means every model is busy
 export const firstFreeModel = async <T>(call: (model: string) => Promise<T>) => {
@@ -73,18 +75,41 @@ export default {
 
     const ai = new GoogleGenAI({ apiKey })
     const abortSignal = AbortSignal.timeout(TIMEOUT_MS)
+    let chunks
     try {
-      const response = await firstFreeModel((model) =>
-        ai.models.generateContent({ model, contents: input.prompt, config: { systemInstruction: systemPrompt(input.language), abortSignal } })
+      // Busy and bad-key errors arrive here, before the first byte, so they still get a normal status
+      chunks = await firstFreeModel((model) =>
+        ai.models.generateContentStream({ model, contents: input.prompt, config: { systemInstruction: systemPrompt(input.language), maxOutputTokens: MAX_OUTPUT_TOKENS, abortSignal } })
       )
-      if (!response) return reply(503, { error: 'busy', detail: '' })
-      const code = stripFences(response.text ?? '')
-      return code ? reply(200, { code }) : reply(502, { error: 'badResponse' })
     } catch (err) {
       console.error(err)
       // Only the status goes to the browser; the full provider message stays in the function logs
       if (err instanceof ApiError) return reply(502, { error: 'request', detail: `(${err.status})` })
       return reply(504, { error: 'network' })
     }
+    if (!chunks) return reply(503, { error: 'busy', detail: '' })
+    const stream = chunks
+    const encoder = new TextEncoder()
+    // The client strips fences and checks the END tail (src/workspace/fences.ts)
+    return new Response(
+      new ReadableStream({
+        async start(controller) {
+          let status = 'ok'
+          try {
+            for await (const chunk of stream) {
+              if (chunk.text) controller.enqueue(encoder.encode(chunk.text))
+              // Hit the output ceiling: the code stops mid-file, so it isn't written
+              if (chunk.candidates?.[0]?.finishReason === 'MAX_TOKENS') status = 'tooLong'
+            }
+          } catch (err) {
+            console.error(err)
+            status = 'network'
+          }
+          controller.enqueue(encoder.encode(END + status))
+          controller.close()
+        },
+      }),
+      { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }
+    )
   },
 }

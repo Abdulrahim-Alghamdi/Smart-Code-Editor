@@ -3,6 +3,7 @@ import type { OnMount } from '@monaco-editor/react'
 import { supabase } from '@/lib/supabase'
 import { accentButton, labelButton, outlineButton } from '@/lib/ui'
 import type { WorkspaceCopy } from './copy'
+import { readGenerated } from './fences'
 
 type CodeEditor = Parameters<OnMount>[0]
 type Mode = 'insert' | 'replace'
@@ -27,6 +28,8 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState<Mode | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Lines received so far, so a long file shows it is still being written
+  const [lines, setLines] = useState(0)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
   const abort = useRef<AbortController | null>(null)
@@ -65,6 +68,7 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
     abort.current = controller
     setBusy(mode)
     setError(null)
+    setLines(0)
     // الزر المضغوط يُعطَّل الآن فيضيع منه التركيز، ومعه Escape والتعديل بعد خطأ
     promptRef.current?.focus({ preventScroll: true })
     const send = async () => {
@@ -83,12 +87,23 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
         if (!(await renewSession())) return close()
         res = await send()
       }
-      const reply = await res.json().catch(() => null)
-      if (controller.signal.aborted) return
-      if (!res.ok || typeof reply?.code !== 'string') {
+      if (!res.ok || !res.body) {
+        const reply = await res.json().catch(() => null)
+        if (controller.signal.aborted) return
         const message = g.errors[reply?.error as keyof typeof g.errors] ?? g.errors.request
         return setError(`${message} ${reply?.detail ?? `(${res.status})`}`)
       }
+      // The code arrives as it is written; no deadline here, the server ends the stream itself
+      let body = ''
+      const decoder = new TextDecoder()
+      const reader = res.body.getReader()
+      for (let part = await reader.read(); !part.done; part = await reader.read()) {
+        body += decoder.decode(part.value, { stream: true })
+        setLines(body.split('\n').length)
+      }
+      if (controller.signal.aborted) return
+      const reply = readGenerated(body + decoder.decode())
+      if ('error' in reply) return setError(g.errors[reply.error as keyof typeof g.errors] ?? g.errors.request)
       // بدّل المستخدم الملف أو لغته أثناء الانتظار: الكود لم يُكتب لهذا الملف، فلا يُكتب فيه
       if (editor.getModel() !== model || model.getLanguageId() !== languageId) return setError(g.errors.fileChanged)
       apply(editor, reply.code, mode)
@@ -163,7 +178,7 @@ export function AIGenerator({ editorRef, language, needsAccount, renewSession, k
             <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
               {busy && (
                 <span role="status" className="me-auto text-sm text-ink-2">
-                  {g.generating}
+                  {lines > 1 ? g.writing(lines) : g.generating}
                 </span>
               )}
               <button type="button" onClick={close} className={outlineButton}>

@@ -3,6 +3,6 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": { "api/generate.ts": { "maxDuration": 60 } },
+  "functions": { "api/generate.ts": { "maxDuration": 300 } },
   "rewrites": [{ "source": "/((?!api/|@)[^.]*)", "destination": "/index.html" }]
 }

@@ -2,7 +2,8 @@
 // The _ prefix keeps this file from being deployed as a Vercel Function
 import assert from 'node:assert'
 import { ApiError } from '@google/genai'
-import handler, { firstFreeModel, parseRequest, stripFences } from './generate.ts'
+import handler, { firstFreeModel, parseRequest } from './generate.ts'
+import { readGenerated, stripFences } from '../src/workspace/fences.ts'
 
 // Raw code passes through untouched, apart from the blank edges
 assert.equal(stripFences('const a = 1\n'), 'const a = 1')
@@ -19,6 +20,12 @@ assert.equal(stripFences('# Title\n\n```js\nx\n```\n\nEnd'), '# Title\n\n```js\n
 // A reply of nothing stays empty, so the route answers badResponse and never blanks the file
 assert.equal(stripFences(''), '')
 assert.equal(stripFences('```\n```'), '')
+
+// The streamed body only counts once its ok tail arrived; a cut stream never reaches the file
+assert.deepEqual(readGenerated('```js\nconst a = 1\n```\u0000ok'), { code: 'const a = 1' })
+assert.deepEqual(readGenerated('const a = 1\nconst b'), { error: 'network' })
+assert.deepEqual(readGenerated('const a\u0000busy'), { error: 'busy' })
+assert.deepEqual(readGenerated('  \u0000ok'), { error: 'badResponse' })
 
 // Request shape and size are checked before any tokens are spent
 assert.deepEqual(parseRequest({ prompt: ' sort a list ', language: 'C#' }), { prompt: 'sort a list', language: 'C#' })
