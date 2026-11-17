@@ -882,7 +882,7 @@ function App() {
               {/* صندوق المحرر بتصميم صندوق الإدخال */}
               <div className="relative flex flex-col overflow-hidden rounded-2xl border border-accent-soft bg-surface-2 shadow-sm">
                 {/* شريط أوامر الملفات فوق التبويبات؛ LTR مثل التبويبات والمحرر حتى يبقى على اليسار وبالترتيب نفسه في العربية */}
-                <div dir="ltr" className="flex items-center gap-1 px-2 pt-2">
+                <div dir="ltr" className="flex flex-wrap items-center gap-1 px-2 pt-2">
                   <input
                     ref={importRef}
                     type="file"
