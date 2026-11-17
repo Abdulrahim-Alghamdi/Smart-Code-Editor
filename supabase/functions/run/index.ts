@@ -75,7 +75,7 @@ const tidy = (text: string | undefined, filename: string) =>
     .replace(/^# _\/home\/wandbox\n/gm, '')
     .replace(/(?:\/home\/wandbox\/|\.\/)?\bprog\.(\w+)\b/g, filename)
     // Compiler Explorer's name for the file
-    .replace(/(?:\/app\/)?\bexample\.(kt|swift|dart)\b/g, filename)
+    .replace(/(?:\/app\/)?\bexample\.(kt|swift|dart)\b|<source>/g, filename)
 
 interface GodboltResult {
   code?: number
@@ -88,22 +88,34 @@ const joinLines = (lines?: Array<{ text: string }>) => (lines ?? []).map((l) => 
 
 // One call to Compiler Explorer, answered in Wandbox's shape so the rest of this function stays the same
 async function godbolt(compiler: string, code: string, stdin: string, timeoutMs: number): Promise<Attempt> {
-  try {
-    const res = await fetch(`https://godbolt.org/api/compiler/${compiler}/compile`, {
+  const signal = AbortSignal.timeout(timeoutMs)
+  const call = (execute: boolean) =>
+    fetch(`https://godbolt.org/api/compiler/${compiler}/compile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
         source: code,
-        options: { userArguments: '', executeParameters: { args: [], stdin }, compilerOptions: { executorRequest: true }, filters: { execute: true }, tools: [], libraries: [] },
+        options: execute
+          ? { userArguments: '', executeParameters: { args: [], stdin }, compilerOptions: { executorRequest: true }, filters: { execute: true }, tools: [], libraries: [] }
+          : { userArguments: '', filters: { execute: false, binary: false }, tools: [], libraries: [] },
         allowStoreCodeDebug: false,
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal,
     })
+  try {
+    const res = await call(true)
     if (res.status === 429 || res.status >= 500) return { ok: false, kind: 'busy', detail: `HTTP ${res.status}` }
     // 404: the compiler id was retired, so try the fallback
     if (res.status === 404) return { ok: false, kind: 'unavailable', detail: compiler }
     if (!res.ok) return { ok: false, kind: 'request', detail: `HTTP ${res.status}` }
     const r: GodboltResult = await res.json()
+    // Kotlin's run request answers a compile error with only "Assertion failed"; a compile-only request has the messages
+    if (!r.buildResult && r.code === -1) {
+      const compiled = await call(false)
+      const c: GodboltResult = compiled.ok ? await compiled.json() : {}
+      const messages = (c.stderr ?? []).filter((l) => !/jansi|UnsatisfiedLinkError|^\s+at |was removed in Kotlin/.test(l.text))
+      if (messages.length) r.buildResult = { code: c.code || 1, stderr: messages }
+    }
     const buildFailed = (r.buildResult?.code ?? 0) !== 0
     return {
       ok: true,
@@ -111,7 +123,8 @@ async function godbolt(compiler: string, code: string, stdin: string, timeoutMs:
         // the build's stderr on success is only the Kotlin compiler's own noise (a jansi warning), not the user's
         compiler_error: buildFailed ? joinLines(r.buildResult?.stderr) : '',
         program_output: joinLines(r.stdout),
-        program_error: joinLines(r.stderr),
+        // after a failed build the run's stderr only says so ("Build failed", "Assertion failed")
+        program_error: buildFailed ? '' : joinLines(r.stderr),
         status: String(buildFailed ? (r.buildResult?.code ?? 1) : r.timedOut ? 137 : (r.code ?? 0)),
       },
     }
