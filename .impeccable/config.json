@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-17T06:29:37.561Z",
+        "reason": "agent: the launch screen repeats the app's existing Inter body font (index.html Google Fonts link predates this session) so it matches the app"
+      }
+    ]
+  }
+}
